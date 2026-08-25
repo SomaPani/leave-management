@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5f7f5;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:#17221c;-webkit-font-smoothing:antialiased}
+input,select,textarea,button{font:inherit;color:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid #2e8b57;outline-offset:-1px}
+a{color:#2e8b57;text-decoration:none}
+a:hover{color:#236b43;text-decoration:underline}
+</style>
+<script src="./image-slot.js"></script>
+</helmet>
+
+<sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+  <div style="min-height:100vh;display:grid;grid-template-columns:1.15fr 1fr">
+    <div style="background:#12372a;color:#f5f7f5;padding:64px;display:flex;flex-direction:column;justify-content:space-between">
+      <div style="font-size:13px;letter-spacing:0.16em;text-transform:uppercase;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#9db8ac">{{ companyName }}</div>
+      <div style="display:flex;flex-direction:column;gap:24px;max-width:460px">
+        <h1 style="margin:0;font-size:46px;line-height:1.05;font-weight:500;letter-spacing:-0.02em;text-wrap:pretty;color:#f5f7f5">Leave Management, Without the Hassle</h1>
+        <p style="margin:0;font-size:16px;line-height:1.6;color:#9db8ac;text-wrap:pretty">Apply, approve, and settle it in one place. Balances update the moment a request is decided.</p>
+      </div>
+      <div style="display:flex;gap:40px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:#9db8ac">
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="color:#f5f7f5;font-size:22px">{{ statTeam }}</span><span>PEOPLE</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="color:#f5f7f5;font-size:22px">{{ statPending }}</span><span>PENDING</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="color:#f5f7f5;font-size:22px">{{ statOut }}</span><span>OUT TODAY</span></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;padding:48px">
+      <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:28px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <h2 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.01em">Sign in</h2>
+          <p style="margin:0;font-size:14px;color:#6b756f">Choose an account to continue.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ accounts }}" as="acc" hint-placeholder-count="2">
+            <button onClick="{{ acc.onPick }}" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;text-align:left;transition:border-color 120ms,box-shadow 120ms" style-hover="border-color:#2e8b57;box-shadow:0 1px 0 #2e8b57">
+              <span style="width:38px;height:38px;border-radius:50%;background:#ffffff;color:#2e8b57;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;letter-spacing:0.04em">{{ acc.initials }}</span>
+              <span style="display:flex;flex-direction:column;gap:2px;flex:1">
+                <span style="font-size:14px;font-weight:600">{{ acc.name }}</span>
+                <span style="font-size:12px;color:#6b756f">{{ acc.email }}</span>
+              </span>
+              <span style="font-size:10px;letter-spacing:0.12em;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#6b756f;border:1px solid #e2e8f0;padding:4px 7px;border-radius:5px">{{ acc.roleLabel }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;padding-top:20px;border-top:1px solid #e2e8f0">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6b756f">Password
+            <input type="password" value="••••••••" readOnly="{{ true }}" style="padding:11px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#ffffff;font-size:14px" />
+          </label>
+          <p style="margin:0;font-size:12px;color:#6b756f">Demo prototype — pick any account above.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+  <div style="min-height:100vh;display:grid;grid-template-columns:236px 1fr">
+    <aside style="background:#12372a;border-right:1px solid #12372a;color:#f5f7f5;padding:24px 16px;display:flex;flex-direction:column;gap:28px;position:sticky;top:0;height:100vh">
+      <div style="padding:0 8px;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#6b756f">{{ companyName }}</div>
+      <nav style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ nav }}" as="item" hint-placeholder-count="3">
+          <button onClick="{{ item.onClick }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0;border-radius:8px;cursor:pointer;font-size:14px;text-align:left;background:{{ item.bg }};color:{{ item.fg }}">
+            <span style="flex:1">{{ item.label }}</span>
+            <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;background:#ffffff;color:#2e8b57;border-radius:20px;padding:2px 7px">{{ item.badge }}</span>
+            </sc-if>
+          </button>
+        </sc-for>
+      </nav>
+      <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px;border-top:1px solid #dcece2;padding-top:16px">
+        <div style="display:flex;align-items:center;gap:10px;padding:0 4px">
+          <span style="width:32px;height:32px;border-radius:50%;background:#e2e8f0;color:#4d574f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">{{ meInitials }}</span>
+          <span style="display:flex;flex-direction:column">
+            <span style="font-size:13px;font-weight:600">{{ meName }}</span>
+            <span style="font-size:11px;color:#6b756f">{{ meRoleLabel }}</span>
+          </span>
+        </div>
+        <button onClick="{{ logout }}" style="background:transparent;border:1px solid #e2e8f0;color:#6b756f;border-radius:8px;padding:8px;font-size:12px;cursor:pointer" style-hover="color:#17221c;border-color:#6b756f">Sign out</button>
+      </div>
+    </aside>
+
+    <main style="min-width:0;padding:36px 40px 64px;display:flex;flex-direction:column;gap:28px;max-width:1180px">
+      <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;border-bottom:1px solid #e2e8f0;padding-bottom:20px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <h1 style="margin:0;font-size:27px;font-weight:600;letter-spacing:-0.015em">{{ pageTitle }}</h1>
+          <p style="margin:0;font-size:14px;color:#6b756f">{{ pageSub }}</p>
+        </div>
+        <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:#6b756f">{{ today }}</div>
+      </header>
+
+      <sc-if value="{{ tabApprovals }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:24px;align-items:start">
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <div style="display:flex;gap:6px;padding:12px 14px;border-bottom:1px solid #e2e8f0">
+              <sc-for list="{{ filters }}" as="f" hint-placeholder-count="3">
+                <button onClick="{{ f.onClick }}" style="border:1px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer">{{ f.label }}</button>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ queue }}" as="r" hint-placeholder-count="4">
+                <button onClick="{{ r.onOpen }}" style="display:grid;grid-template-columns:1fr auto;gap:6px 16px;padding:14px 16px;border:0;border-bottom:1px solid #e2e8f0;background:{{ r.rowBg }};cursor:pointer;text-align:left" style-hover="background:#f8fafc">
+                  <span style="display:flex;align-items:center;gap:10px">
+                    <span style="width:28px;height:28px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{ r.initials }}</span>
+                    <span style="font-size:14px;font-weight:600">{{ r.who }}</span>
+                    <span style="font-size:12px;color:#6b756f">{{ r.type }}</span>
+                  </span>
+                  <span style="font-size:11px;letter-spacing:0.08em;font-family:ui-monospace,'SF Mono',Menlo,monospace;padding:3px 8px;border-radius:5px;background:{{ r.statusBg }};color:{{ r.statusFg }}">{{ r.statusLabel }}</span>
+                  <span style="grid-column:1;font-size:13px;color:#4d574f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ r.range }}</span>
+                  <span style="font-size:13px;color:#6b756f">{{ r.daysLabel }}</span>
+                </button>
+              </sc-for>
+              <sc-if value="{{ queueEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:44px 16px;text-align:center;font-size:14px;color:#6b756f">Nothing here.</div>
+              </sc-if>
+            </div>
+          </div>
+
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;display:flex;flex-direction:column;gap:20px;position:sticky;top:24px">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <h3 style="margin:0;font-size:17px;font-weight:600">{{ selWho }}</h3>
+                  <span style="font-size:11px;letter-spacing:0.08em;font-family:ui-monospace,'SF Mono',Menlo,monospace;padding:3px 8px;border-radius:5px;background:{{ selStatusBg }};color:{{ selStatusFg }}">{{ selStatusLabel }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px;background:#f8fafc;border-radius:9px">
+                  <span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#6b756f;letter-spacing:0.06em">TYPE</span><span style="font-size:13px;font-weight:600">{{ selType }}</span></span>
+                  <span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#6b756f;letter-spacing:0.06em">DATES</span><span style="font-size:13px;font-weight:600">{{ selRange }}</span></span>
+                  <span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#6b756f;letter-spacing:0.06em">BALANCE AFTER</span><span style="font-size:13px;font-weight:600">{{ selBalanceAfter }}</span></span>
+                </div>
+                <p style="margin:0;font-size:14px;line-height:1.6;color:#e2e8f0;text-wrap:pretty">{{ selReason }}</p>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;border-top:1px solid #e2e8f0;padding-top:16px">
+                <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">FEEDBACK</span>
+                <div style="display:flex;flex-direction:column;gap:10px;max-height:240px;overflow:auto">
+                  <sc-for list="{{ selThread }}" as="m" hint-placeholder-count="2">
+                    <div style="display:flex;flex-direction:column;gap:4px;padding:11px 13px;border-radius:9px;background:{{ m.bg }};align-self:{{ m.align }};max-width:88%">
+                      <span style="font-size:11px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ m.who }} · {{ m.at }}</span>
+                      <span style="font-size:13.5px;line-height:1.55">{{ m.text }}</span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ selThreadEmpty }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:13px;color:#6b756f">No feedback yet.</span>
+                  </sc-if>
+                </div>
+                <textarea value="{{ draft }}" onChange="{{ onDraft }}" placeholder="Write feedback for this request…" rows="3" style="background:#f8fafc;color:#17221c;border:1px solid #e2e8f0;border-radius:9px;padding:11px;font-size:13.5px;resize:vertical;background:#ffffff"></textarea>
+              </div>
+
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <sc-if value="{{ canDecide }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;gap:8px;flex:1">
+                    <button onClick="{{ onApprove }}" style="flex:1;background:#2e8b57;color:#ffffff;border:0;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#236b43">Approve</button>
+                    <button onClick="{{ onReject }}" style="flex:1;background:#ffffff;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#fef2f2">Reject</button>
+                  </div>
+                </sc-if>
+                <button onClick="{{ onComment }}" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:11px 16px;font-size:14px;cursor:pointer" style-hover="border-color:#6b756f">Send comment</button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#ffffff;border:1px dashed #4d574f;border-radius:12px;padding:56px 24px;text-align:center;color:#6b756f;font-size:14px">Select a request to review it.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabAttendance }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px;max-width:900px">
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;color:#6b756f;letter-spacing:0.06em">DATE
+              <input type="date" value="{{ markDate }}" onChange="{{ onMarkDate }}" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c" />
+            </label>
+            <span style="display:flex;flex-direction:column;gap:5px;flex:1">
+              <span style="font-size:15px;font-weight:600">{{ markDateLabel }}</span>
+              <span style="display:flex;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ markSummary }}" as="c" hint-placeholder-count="4">
+                  <span style="display:flex;align-items:center;gap:6px;background:{{ c.bg }};color:{{ c.fg }};border-radius:20px;padding:3px 10px;font-size:12px"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-weight:600">{{ c.value }}</span>{{ c.label }}</span>
+                </sc-for>
+              </span>
+            </span>
+            <button onClick="{{ markAllPresent }}" style="background:#2e8b57;color:#ffffff;border:0;border-radius:8px;padding:11px 16px;font-size:13px;cursor:pointer;white-space:nowrap" style-hover="background:#236b43">Mark all present</button>
+          </div>
+          <sc-if value="{{ markIsWeekend }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;font-size:13px;color:#92400e">That's a weekend — most agencies leave it unmarked.</div>
+          </sc-if>
+          <sc-for list="{{ markGroups }}" as="mg" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <span style="font-size:15px;font-weight:600;letter-spacing:-0.01em">{{ mg.modeLabel }}</span>
+              <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <sc-for list="{{ mg.rows }}" as="p" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid #e2e8f0">
+                    <span style="width:32px;height:32px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{ p.initials }}</span>
+                    <span style="display:flex;flex-direction:column;gap:2px;flex:1">
+                      <span style="font-size:14px;font-weight:600">{{ p.name }}</span>
+                      <span style="font-size:12px;color:{{ p.noteFg }}">{{ p.note }}</span>
+                    </span>
+                    <span style="display:flex;gap:6px">
+                      <sc-for list="{{ p.options }}" as="o" hint-placeholder-count="4">
+                        <button onClick="{{ o.onClick }}" style="border:1px solid {{ o.border }};background:{{ o.bg }};color:{{ o.fg }};border-radius:7px;padding:7px 12px;font-size:12.5px;cursor:pointer" style-hover="border-color:#f8fafc">{{ o.label }}</button>
+                      </sc-for>
+                      <sc-if value="{{ p.locked }}" hint-placeholder-val="{{ false }}">
+                        <span style="border:1px solid #dcfce7;background:#dcfce7;color:#16a34a;border-radius:7px;padding:7px 12px;font-size:12.5px;font-weight:600">WFH</span>
+                      </sc-if>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabCalendar }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;align-items:start;max-width:940px">
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <h3 style="margin:0;font-size:17px;font-weight:600">{{ calMonthLabel }}</h3>
+              <span style="display:flex;gap:6px">
+                <button onClick="{{ onPrevMonth }}" style="width:32px;height:32px;border:1px solid #e2e8f0;background:#ffffff;border-radius:8px;cursor:pointer;font-size:14px;color:#4d574f" style-hover="border-color:#f8fafc">‹</button>
+                <button onClick="{{ onNextMonth }}" style="width:32px;height:32px;border:1px solid #e2e8f0;background:#ffffff;border-radius:8px;cursor:pointer;font-size:14px;color:#4d574f" style-hover="border-color:#f8fafc">›</button>
+              </span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px">
+              <sc-for list="{{ weekdayLabels }}" as="w" hint-placeholder-count="7">
+                <span style="text-align:center;font-size:11px;letter-spacing:0.08em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ w.label }}</span>
+              </sc-for>
+              <sc-for list="{{ calCells }}" as="c" hint-placeholder-count="35">
+                <span style="min-width:0;aspect-ratio:1/1;border:1px solid {{ c.border }};background:{{ c.bg }};border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;overflow:hidden">
+                  <span style="font-size:13px;line-height:1.1;font-weight:{{ c.weight }};color:{{ c.fg }}">{{ c.day }}</span>
+                  <span style="font-size:9px;line-height:1.1;letter-spacing:0.04em;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:{{ c.fg }}">{{ c.short }}</span>
+                </span>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid #e2e8f0;padding-top:14px">
+              <sc-for list="{{ calLegend }}" as="l" hint-placeholder-count="4">
+                <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#4d574f"><span style="width:12px;height:12px;border-radius:3px;background:{{ l.bg }};border:1px solid {{ l.fg }}"></span>{{ l.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+            <sc-for list="{{ calStats }}" as="st" hint-placeholder-count="4">
+              <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                <span style="font-size:13px;color:#6b756f">{{ st.label }}</span>
+                <span style="font-size:24px;font-weight:600;letter-spacing:-0.02em">{{ st.value }}</span>
+              </div>
+            </sc-for>
+            <p style="margin:0;font-size:12.5px;color:#6b756f;line-height:1.55">Marked by your admin. Approved leave appears automatically — flag anything wrong in the request thread.</p>
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px">
+              <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">HOLIDAYS</span>
+                <span style="font-size:11px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ holidayRegion }} · {{ holidayTotal }}</span>
+              </span>
+              <sc-for list="{{ holidayList }}" as="h" hint-placeholder-count="8">
+                <span style="display:flex;align-items:center;gap:9px;padding-bottom:8px;border-bottom:1px solid #e2e8f0">
+                  <span style="width:5px;height:5px;border-radius:50%;background:#2dd4bf;flex-shrink:0"></span>
+                  <span style="font-size:12.5px;flex:1;min-width:0">{{ h.name }}</span>
+                  <span style="font-size:11.5px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ h.date }}</span>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabTeam }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <span style="font-size:13px;color:#6b756f">{{ rosterCount }} across Chennai and Delhi</span>
+          <sc-if value="{{ addClosed }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ openAdd }}" style="background:#2e8b57;color:#ffffff;border:0;border-radius:8px;padding:10px 16px;font-size:13px;cursor:pointer" style-hover="background:#236b43">Add new</button>
+          </sc-if>
+        </div>
+        <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#ffffff;border:1px solid #2e8b57;border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+            <span style="font-size:15px;font-weight:600">Add someone to the team</span>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6b756f">Full name
+                <input value="{{ newName }}" onChange="{{ onNewName }}" placeholder="e.g. Aisha Khan" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6b756f">Role
+                <input value="{{ newTitle }}" onChange="{{ onNewTitle }}" placeholder="e.g. Art director" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6b756f">Work email
+                <input value="{{ newEmail }}" onChange="{{ onNewEmail }}" placeholder="name@stacx24.com" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6b756f">Region
+                <select value="{{ newRegion }}" onChange="{{ onNewRegion }}" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#ffffff;color:#17221c">
+                  <sc-for list="{{ regionOptions }}" as="r" hint-placeholder-count="2">
+                    <option value="{{ r.value }}">{{ r.label }}</option>
+                  </sc-for>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6b756f">Working mode
+                <select value="{{ newWorkMode }}" onChange="{{ onNewWorkMode }}" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#ffffff;color:#17221c">
+                  <sc-for list="{{ workModeOptions }}" as="w" hint-placeholder-count="2">
+                    <option value="{{ w.value }}">{{ w.label }}</option>
+                  </sc-for>
+                </select>
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #e2e8f0;padding-top:14px">
+              <button onClick="{{ saveAdd }}" style="background:#2e8b57;color:#ffffff;border:0;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#236b43">Add to team</button>
+              <button onClick="{{ cancelAdd }}" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:11px 16px;font-size:13px;cursor:pointer" style-hover="border-color:#6b756f">Cancel</button>
+              <span style="font-size:12.5px;color:#6b756f">Starts on the standard policy — 6 casual, 6 sick, 18 paid.</span>
+            </div>
+          </div>
+        </sc-if>
+        <sc-for list="{{ regionGroups }}" as="g" hint-placeholder-count="2">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:baseline;gap:12px">
+              <span style="font-size:15px;font-weight:600;letter-spacing:-0.01em">{{ g.region }}</span>
+              <span style="font-size:12px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ g.countLabel }} · {{ g.outLabel }}</span>
+            </div>
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <div style="display:grid;grid-template-columns:1.6fr 0.7fr repeat(4,1fr);gap:16px;padding:12px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;font-size:11px;letter-spacing:0.08em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">
+                <span>PERSON</span><span>SCORE</span><span>CASUAL</span><span>SICK</span><span>PAID</span><span>STATUS TODAY</span>
+              </div>
+              <sc-for list="{{ g.rows }}" as="p" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:1.6fr 0.7fr repeat(4,1fr);gap:16px;padding:14px 18px;border-bottom:1px solid #e2e8f0;align-items:center">
+                  <span style="display:flex;align-items:center;gap:10px">
+                    <span style="width:30px;height:30px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{ p.initials }}</span>
+                    <span style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:600">{{ p.name }}</span><span style="font-size:12px;color:#6b756f">{{ p.title }}</span></span>
+                  </span>
+                  <span style="font-size:13px;font-weight:600;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ p.score }}</span>
+                  <span style="font-size:13px;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ p.casual }}</span>
+                  <span style="font-size:13px;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ p.sick }}</span>
+                  <span style="font-size:13px;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ p.paid }}</span>
+                  <span style="font-size:12px;padding:3px 9px;border-radius:5px;justify-self:start;background:{{ p.todayBg }};color:{{ p.todayFg }}">{{ p.today }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabSetup }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px;max-width:940px">
+          <sc-for list="{{ policies }}" as="pol" hint-placeholder-count="3">
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;display:grid;grid-template-columns:1fr auto auto;gap:20px;align-items:center">
+              <span style="display:flex;flex-direction:column;gap:5px">
+                <span style="font-size:15px;font-weight:600">{{ pol.name }}</span>
+                <span style="font-size:13px;color:#6b756f">{{ pol.note }}</span>
+              </span>
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:#6b756f;letter-spacing:0.06em">{{ pol.unitLabel }}
+                <input type="number" value="{{ pol.days }}" onChange="{{ pol.onDays }}" style="width:88px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c;font-family:ui-monospace,'SF Mono',Menlo,monospace" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:#6b756f;letter-spacing:0.06em">CARRY OVER
+                <button onClick="{{ pol.onToggle }}" style="width:88px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:8px;background:{{ pol.carryBg }};color:{{ pol.carryFg }};font-size:13px;cursor:pointer">{{ pol.carryLabel }}</button>
+              </label>
+            </div>
+          </sc-for>
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:20px;align-items:center">
+            <span style="display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:15px;font-weight:600">WFH</span>
+              <span style="font-size:13px;color:#6b756f">Two days a month, booked a day ahead. Resets on the 1st — {{ wfhPerYear }}.</span>
+            </span>
+            <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:#6b756f;letter-spacing:0.06em">DAYS / MONTH
+              <input type="number" value="{{ wfhPerMonth }}" onChange="{{ onWfhDays }}" style="width:88px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c;font-family:ui-monospace,'SF Mono',Menlo,monospace" />
+            </label>
+            <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:#6b756f;letter-spacing:0.06em">APPROVAL
+              <button onClick="{{ onWfhApproval }}" style="width:110px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:8px;background:{{ wfhApprovalBg }};color:{{ wfhApprovalFg }};font-size:13px;cursor:pointer">{{ wfhApprovalLabel }}</button>
+            </label>
+          </div>
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+            <span style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <span style="display:flex;align-items:baseline;gap:10px">
+                <span style="font-size:15px;font-weight:600">Holiday calendar 2026</span>
+                <span style="font-size:12px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ holidayRegion }} · {{ holidayTotal }} DAYS</span>
+              </span>
+              <span style="display:flex;gap:6px">
+                <sc-for list="{{ holidayRegionTabs }}" as="rt" hint-placeholder-count="2">
+                  <button onClick="{{ rt.onClick }}" style="border:1px solid {{ rt.border }};background:{{ rt.bg }};color:{{ rt.fg }};border-radius:20px;padding:5px 13px;font-size:12px;cursor:pointer">{{ rt.label }}</button>
+                </sc-for>
+              </span>
+            </span>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:18px 20px">
+              <sc-for list="{{ holidayMonths }}" as="mo" hint-placeholder-count="12">
+                <span style="display:flex;flex-direction:column;gap:7px">
+                  <span style="font-size:11px;letter-spacing:0.12em;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:{{ mo.dim }}">{{ mo.label }}</span>
+                  <span style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">
+                    <sc-for list="{{ mo.cells }}" as="c" hint-placeholder-count="35">
+                      <span style="aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:9.5px;background:{{ c.bg }};color:{{ c.fg }};font-weight:{{ c.weight }}">{{ c.day }}</span>
+                    </sc-for>
+                  </span>
+                  <span style="display:flex;flex-direction:column;gap:1px;min-height:14px">
+                    <sc-for list="{{ mo.names }}" as="n" hint-placeholder-count="1">
+                      <span style="font-size:10.5px;color:#0f766e;line-height:1.35">{{ n.name }}</span>
+                    </sc-for>
+                  </span>
+                </span>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:0 26px;border-top:1px solid #e2e8f0;padding-top:6px">
+              <sc-for list="{{ holidayList }}" as="h" hint-placeholder-count="7">
+                <span style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #e2e8f0">
+                  <span style="width:6px;height:6px;border-radius:50%;background:#2dd4bf;flex-shrink:0"></span>
+                  <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0">
+                    <span style="font-size:12.5px;font-weight:600;color:{{ h.nameFg }}">{{ h.name }}</span>
+                    <span style="font-size:11px;color:#6b756f">{{ h.note }}</span>
+                  </span>
+                  <span style="font-size:11.5px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace;white-space:nowrap">{{ h.date }} · {{ h.weekday }}</span>
+                  <span style="font-size:10.5px;background:{{ h.countBg }};color:{{ h.countFg }};border-radius:20px;padding:2px 8px;white-space:nowrap">{{ h.count }}</span>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+            <span style="font-size:15px;font-weight:600">Approval rules</span>
+            <sc-for list="{{ rules }}" as="rule" hint-placeholder-count="2">
+              <button onClick="{{ rule.onToggle }}" style="display:flex;align-items:center;gap:12px;background:transparent;border:0;padding:0;cursor:pointer;text-align:left">
+                <span style="width:38px;height:22px;border-radius:20px;background:{{ rule.trackBg }};padding:3px;display:flex;justify-content:{{ rule.justify }};transition:background 140ms">
+                  <span style="width:16px;height:16px;border-radius:50%;background:#ffffff"></span>
+                </span>
+                <span style="font-size:14px;color:#e2e8f0">{{ rule.label }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabScores }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:300px minmax(0,1fr);gap:24px;align-items:start;max-width:940px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ scoreRoster }}" as="p" hint-placeholder-count="5">
+              <button onClick="{{ p.onClick }}" style="display:flex;align-items:center;gap:12px;padding:13px 15px;background:{{ p.bg }};border:1px solid {{ p.border }};border-radius:10px;cursor:pointer;text-align:left" style-hover="border-color:#2e8b57">
+                <span style="width:32px;height:32px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{ p.initials }}</span>
+                <span style="display:flex;flex-direction:column;gap:2px;flex:1">
+                  <span style="font-size:14px;font-weight:600">{{ p.name }}</span>
+                  <span style="font-size:12px;color:#6b756f">{{ p.title }}</span>
+                </span>
+                <span style="font-size:17px;font-weight:600;letter-spacing:-0.02em;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ p.total }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{ hasScoreSel }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:stretch">
+                <div style="background:#ffffff;color:#17221c;border-radius:12px;padding:22px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+                  <span style="display:flex;flex-direction:column;gap:10px">
+                    <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">SCORE 2026</span>
+                    <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:52px;font-weight:600;letter-spacing:-0.03em;line-height:1">{{ selScoreTotal }}</span><span style="font-size:14px;color:#6b756f">/ 100</span></span>
+                  </span>
+                  <span style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+                    <span style="font-size:13px;background:#dcece2;color:#236b43;border-radius:20px;padding:5px 12px">{{ selScoreGrade }}</span>
+                    <span style="display:flex;flex-direction:column;gap:2px;text-align:right">
+                      <span style="font-size:14px;font-weight:600">{{ selScoreName }}</span>
+                      <span style="font-size:12px;color:#6b756f">{{ selScoreTitle }}</span>
+                    </span>
+                  </span>
+                </div>
+                <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px">
+                  <sc-for list="{{ selScoreMetrics }}" as="m" hint-placeholder-count="4">
+                    <div style="display:flex;flex-direction:column;gap:9px">
+                      <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                        <span style="font-size:13px;color:#6b756f">{{ m.label }}</span>
+                        <span style="font-size:19px;font-weight:600;letter-spacing:-0.015em">{{ m.value }}</span>
+                      </span>
+                      <span style="height:5px;border-radius:4px;background:#e2e8f0;display:block;overflow:hidden">
+                        <span style="display:block;height:5px;border-radius:4px;background:#2e8b57;width:{{ m.pct }}"></span>
+                      </span>
+                      <span style="font-size:12px;color:#6b756f">{{ m.detail }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:8px 22px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 32px">
+                <sc-for list="{{ selScoreLedger }}" as="l" hint-placeholder-count="6">
+                  <span style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #e2e8f0">
+                    <span style="font-size:13.5px;color:#4d574f">{{ l.label }}</span>
+                    <span style="font-size:13.5px;font-weight:600;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ l.value }}</span>
+                  </span>
+                </sc-for>
+              </div>
+              <p style="margin:0;font-size:12.5px;color:#6b756f">Static figures for now — wired up once the real data source is connected.</p>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noScoreSel }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#ffffff;border:1px dashed #4d574f;border-radius:12px;padding:72px 24px;text-align:center;color:#6b756f;font-size:14px">Click an employee to see their score.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabProfile }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px;max-width:900px">
+          <div style="background:#ffffff;color:#17221c;border-radius:12px;padding:26px 28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+            <span style="position:relative;width:88px;height:88px;flex-shrink:0;border-radius:50%;background:#dcece2;overflow:hidden">
+              <image-slot id="profile-photo" style="position:absolute;inset:0;width:88px;height:88px" shape="circle" placeholder="Add photo"></image-slot>
+            </span>
+            <span style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:0">
+              <span style="font-size:26px;font-weight:600;letter-spacing:-0.02em">{{ profileName }}</span>
+              <span style="font-size:14px;color:#6b756f">{{ profileTitle }} · {{ profileRegion }}</span>
+            </span>
+            <span style="display:flex;gap:28px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:#6b756f">
+              <span style="display:flex;flex-direction:column;gap:5px"><span style="color:#17221c;font-size:15px">{{ profileEmpId }}</span><span>EMPLOYEE ID</span></span>
+              <span style="display:flex;flex-direction:column;gap:5px"><span style="color:#17221c;font-size:15px">{{ profileJoined }}</span><span>JOINED</span></span>
+            </span>
+          </div>
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+            <span style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">DOCUMENTS</span>
+              <label style="display:flex;align-items:center;gap:6px;background:#2e8b57;color:#ffffff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer" style-hover="background:#236b43">
+                Choose File
+                <input type="file" multiple="{{ true }}" onChange="{{ onDocsPicked }}" style="display:none" />
+              </label>
+            </span>
+            <sc-for list="{{ profileDocs }}" as="doc" hint-placeholder-count="2">
+              <span style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #e2e8f0">
+                <span style="width:32px;height:32px;border-radius:8px;background:#dcece2;color:#236b43;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">DOC</span>
+                <span style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
+                  <span style="font-size:13.5px;font-weight:500;text-overflow:ellipsis;overflow:hidden;white-space:nowrap">{{ doc.name }}</span>
+                  <span style="font-size:11.5px;color:#6b756f">{{ doc.size }}</span>
+                </span>
+                <button onClick="{{ doc.onRemove }}" style="background:transparent;border:1px solid #e2e8f0;color:#6b756f;border-radius:7px;padding:6px 11px;font-size:12px;cursor:pointer" style-hover="color:#dc2626;border-color:#dc2626">Remove</button>
+              </span>
+            </sc-for>
+            <sc-if value="{{ noDocs }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size:13px;color:#6b756f">No documents uploaded yet.</span>
+            </sc-if>
+          </div>
+          <sc-for list="{{ profileFields }}" as="grp" hint-placeholder-count="3">
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+              <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ grp.section }}</span>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px 28px">
+                <sc-for list="{{ grp.items }}" as="f" hint-placeholder-count="4">
+                  <span style="display:flex;flex-direction:column;gap:4px">
+                    <span style="font-size:12px;color:#6b756f">{{ f.label }}</span>
+                    <span style="font-size:14px;font-weight:500;line-height:1.45;text-wrap:pretty">{{ f.value }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:24px">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <sc-for list="{{ balances }}" as="b" hint-placeholder-count="3">
+              <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px">
+                <span style="font-size:13px;color:#6b756f">{{ b.name }}</span>
+                <span style="display:flex;align-items:baseline;gap:6px"><span style="font-size:34px;font-weight:600;letter-spacing:-0.02em">{{ b.left }}</span><span style="font-size:13px;color:#6b756f">of {{ b.total }} days left</span></span>
+                <span style="height:5px;border-radius:4px;background:#e2e8f0;display:block;overflow:hidden">
+                  <span style="display:block;height:5px;border-radius:4px;background:#2e8b57;width:{{ b.pct }}"></span>
+                </span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px">
+              <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">NEEDS YOUR REPLY</span>
+              <sc-for list="{{ needsReply }}" as="n" hint-placeholder-count="1">
+                <button onClick="{{ n.onOpen }}" style="display:flex;flex-direction:column;gap:6px;text-align:left;background:#fef3c7;border:1px solid #fde68a;border-radius:9px;padding:13px;cursor:pointer">
+                  <span style="font-size:13px;font-weight:600">{{ n.title }}</span>
+                  <span style="font-size:13px;color:#92400e;line-height:1.5">{{ n.text }}</span>
+                </button>
+              </sc-for>
+              <sc-if value="{{ needsReplyEmpty }}" hint-placeholder-val="{{ true }}">
+                <span style="font-size:13px;color:#6b756f">Nothing waiting on you.</span>
+              </sc-if>
+            </div>
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">
+              <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">WHO'S OUT THIS WEEK</span>
+              <sc-for list="{{ outThisWeek }}" as="o" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="width:26px;height:26px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">{{ o.initials }}</span>
+                  <span style="font-size:13.5px;flex:1">{{ o.name }}</span>
+                  <span style="font-size:12px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ o.range }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabScore }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px;max-width:940px">
+          <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:stretch">
+            <div style="background:#ffffff;color:#17221c;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px">
+              <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">SCORE 2026</span>
+              <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:64px;font-weight:600;letter-spacing:-0.03em;line-height:1">{{ scoreTotal }}</span><span style="font-size:14px;color:#6b756f">/ 100</span></span>
+              <span style="font-size:13px;background:#dcece2;color:#236b43;border-radius:20px;padding:5px 12px;align-self:flex-start">{{ scoreGrade }}</span>
+              <span style="margin-top:auto;font-size:12px;color:#6b756f;line-height:1.5">{{ scoreNote }}</span>
+            </div>
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+              <sc-for list="{{ scoreMetrics }}" as="m" hint-placeholder-count="4">
+                <div style="display:flex;flex-direction:column;gap:9px">
+                  <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                    <span style="font-size:13px;color:#6b756f">{{ m.label }}</span>
+                    <span style="font-size:19px;font-weight:600;letter-spacing:-0.015em">{{ m.value }}</span>
+                  </span>
+                  <span style="height:5px;border-radius:4px;background:#e2e8f0;display:block;overflow:hidden">
+                    <span style="display:block;height:5px;border-radius:4px;background:#2e8b57;width:{{ m.pct }}"></span>
+                  </span>
+                  <span style="font-size:12px;color:#6b756f">{{ m.detail }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;display:flex;flex-direction:column;gap:18px">
+              <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">BY QUARTER</span>
+              <div style="display:flex;align-items:flex-end;gap:18px;height:96px">
+                <sc-for list="{{ scoreQuarters }}" as="q" hint-placeholder-count="4">
+                  <span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;justify-content:flex-end">
+                    <span style="font-size:13px;font-weight:600;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#4d574f">{{ q.value }}</span>
+                    <span style="width:100%;height:{{ q.height }};background:#2dd4bf;border-radius:6px 6px 2px 2px"></span>
+                    <span style="font-size:12px;color:#6b756f">{{ q.label }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:6px 22px 12px;display:flex;flex-direction:column">
+              <sc-for list="{{ scoreLedger }}" as="l" hint-placeholder-count="6">
+                <span style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #e2e8f0">
+                  <span style="font-size:13.5px;color:#4d574f">{{ l.label }}</span>
+                  <span style="font-size:13.5px;font-weight:600;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ l.value }}</span>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabApply }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:24px;align-items:start">
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:18px">
+            <label style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#6b756f">Leave type
+              <select value="{{ formType }}" onChange="{{ onFormType }}" style="padding:11px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#ffffff;color:#17221c">
+                <sc-for list="{{ typeOptions }}" as="t" hint-placeholder-count="3">
+                  <option value="{{ t.value }}">{{ t.label }}</option>
+                </sc-for>
+              </select>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <label style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#6b756f">From
+                <input type="date" value="{{ formFrom }}" onChange="{{ onFormFrom }}" style="padding:11px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c" />
+              </label>
+              <sc-if value="{{ formIsShort }}" hint-placeholder-val="{{ false }}">
+                <label style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#6b756f">To
+                  <input type="date" value="{{ formTo }}" disabled="{{ true }}" style="padding:11px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#6b756f" />
+                </label>
+              </sc-if>
+              <sc-if value="{{ formNotShort }}" hint-placeholder-val="{{ true }}">
+                <label style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#6b756f">To
+                  <input type="date" value="{{ formTo }}" onChange="{{ onFormTo }}" style="padding:11px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#f8fafc;color:#17221c" />
+                </label>
+              </sc-if>
+            </div>
+            <sc-if value="{{ formIsShort }}" hint-placeholder-val="{{ false }}">
+              <p style="margin:0;font-size:12.5px;color:#6b756f;background:#ffffff;border-radius:8px;padding:10px 12px">A 2-hour short leave on {{ formFrom }} — no need to set an end date.</p>
+            </sc-if>
+            <label style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#6b756f">Reason
+              <textarea value="{{ formReason }}" onChange="{{ onFormReason }}" rows="4" placeholder="A line is enough — your manager sees this first." style="background:#f8fafc;color:#17221c;padding:11px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical"></textarea>
+            </label>
+            <div style="display:flex;align-items:center;gap:14px;border-top:1px solid #e2e8f0;padding-top:16px">
+              <button onClick="{{ onSubmit }}" style="background:#2e8b57;color:#ffffff;border:0;border-radius:8px;padding:12px 22px;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#236b43">Submit request</button>
+              <span style="font-size:13px;color:#6b756f">{{ formHint }}</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;color:#17221c;border-radius:12px;padding:22px;display:flex;flex-direction:column;gap:16px">
+            <span style="font-size:11px;letter-spacing:0.1em;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">THIS REQUEST</span>
+            <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:40px;font-weight:600;letter-spacing:-0.02em">{{ formDays }}</span><span style="font-size:13px;color:#6b756f">{{ formUnitLabel }}</span></span>
+            <div style="display:flex;flex-direction:column;gap:10px;border-top:1px solid #dcece2;padding-top:14px">
+              <span style="display:flex;justify-content:space-between;font-size:13px"><span style="color:#6b756f">{{ formType }} balance</span><span>{{ formBalance }}</span></span>
+              <span style="display:flex;justify-content:space-between;font-size:13px"><span style="color:#6b756f">After approval</span><span>{{ formAfter }}</span></span>
+              <span style="display:flex;justify-content:space-between;font-size:13px"><span style="color:#6b756f">Approver</span><span>{{ approverName }}</span></span>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabRequests }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+            <sc-for list="{{ myRequests }}" as="r" hint-placeholder-count="4">
+              <button onClick="{{ r.onOpen }}" style="display:grid;grid-template-columns:1fr auto;gap:6px 16px;width:100%;padding:14px 16px;border:0;border-bottom:1px solid #e2e8f0;background:{{ r.rowBg }};cursor:pointer;text-align:left" style-hover="background:#f8fafc">
+                <span style="font-size:14px;font-weight:600">{{ r.type }}</span>
+                <span style="font-size:11px;letter-spacing:0.08em;font-family:ui-monospace,'SF Mono',Menlo,monospace;padding:3px 8px;border-radius:5px;background:{{ r.statusBg }};color:{{ r.statusFg }}">{{ r.statusLabel }}</span>
+                <span style="font-size:13px;color:#4d574f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ r.range }}</span>
+                <span style="font-size:13px;color:#6b756f">{{ r.daysLabel }}</span>
+              </button>
+            </sc-for>
+            <sc-if value="{{ myRequestsEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:44px 16px;text-align:center;font-size:14px;color:#6b756f">No requests yet.</div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;display:flex;flex-direction:column;gap:18px;position:sticky;top:24px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <h3 style="margin:0;font-size:17px;font-weight:600">{{ selType }} · {{ selRange }}</h3>
+                <span style="font-size:11px;letter-spacing:0.08em;font-family:ui-monospace,'SF Mono',Menlo,monospace;padding:3px 8px;border-radius:5px;background:{{ selStatusBg }};color:{{ selStatusFg }}">{{ selStatusLabel }}</span>
+              </div>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:#e2e8f0;text-wrap:pretty">{{ selReason }}</p>
+              <div style="display:flex;flex-direction:column;gap:10px;border-top:1px solid #e2e8f0;padding-top:16px;max-height:260px;overflow:auto">
+                <sc-for list="{{ selThread }}" as="m" hint-placeholder-count="2">
+                  <div style="display:flex;flex-direction:column;gap:4px;padding:11px 13px;border-radius:9px;background:{{ m.bg }};align-self:{{ m.align }};max-width:88%">
+                    <span style="font-size:11px;color:#6b756f;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ m.who }} · {{ m.at }}</span>
+                    <span style="font-size:13.5px;line-height:1.55">{{ m.text }}</span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ selThreadEmpty }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:13px;color:#6b756f">No feedback yet — you'll be notified here.</span>
+                </sc-if>
+              </div>
+              <div style="display:flex;gap:8px">
+                <textarea value="{{ draft }}" onChange="{{ onDraft }}" rows="2" placeholder="Reply to your admin…" style="flex:1;background:#f8fafc;color:#17221c;border:1px solid #e2e8f0;border-radius:9px;padding:10px 11px;font-size:13.5px;resize:vertical"></textarea>
+                <button onClick="{{ onComment }}" style="background:#2e8b57;color:#ffffff;border:0;border-radius:8px;padding:0 18px;font-size:14px;font-weight:600;cursor:pointer;align-self:stretch" style-hover="background:#236b43">Reply</button>
+              </div>
+              <sc-if value="{{ canCancel }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ onCancel }}" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:13px;color:#dc2626;cursor:pointer" style-hover="background:#fef2f2">Withdraw request</button>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#ffffff;border:1px dashed #4d574f;border-radius:12px;padding:56px 24px;text-align:center;color:#6b756f;font-size:14px">Select a request to see its feedback thread.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;companyName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Stacx24&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const PEOPLE = [
+  { id: "u1", name: "Ananya Rao", initials: "AR", email: "ananya@stacx24.com", title: "Design lead", role: "admin" },
+  { id: "u2", name: "Dev Menon", initials: "DM", email: "dev@stacx24.com", title: "Copywriter", role: "user", region: "Chennai", empId: "STX-0142", joined: "3 Feb 2024", personalEmail: "dev.menon@gmail.com", phone: "+91 98410 22318", address: "12B Kasturi Rangan Rd, Alwarpet, Chennai 600018", emergencyName: "Latha Menon (mother)", emergencyPhone: "+91 98400 71129", manager: "Ananya Rao" },
+  { id: "u3", name: "Priya Shah", initials: "PS", email: "priya@stacx24.com", title: "Account manager", role: "user", region: "Delhi", empId: "STX-0118", joined: "9 Sep 2023", personalEmail: "priya.shah@gmail.com", phone: "+91 98110 46527", address: "44 Nizamuddin East, New Delhi 110013", emergencyName: "Rakesh Shah (father)", emergencyPhone: "+91 98104 33810", manager: "Ananya Rao" },
+  { id: "u4", name: "Kabir Nair", initials: "KN", email: "kabir@stacx24.com", title: "Motion designer", role: "user", region: "Chennai" },
+  { id: "u5", name: "Meera Iyer", initials: "MI", email: "meera@stacx24.com", title: "Strategist", role: "user", region: "Delhi" },
+  { id: "u6", name: "Rohan Das", initials: "RD", email: "rohan@stacx24.com", title: "Developer", role: "user", region: "Chennai" }
+];
+
+const STATUS = {
+  pending: { label: "PENDING", bg: "#fef3c7", fg: "#d97706" },
+  approved: { label: "APPROVED", bg: "#dcfce7", fg: "#16a34a" },
+  rejected: { label: "REJECTED", bg: "#fee2e2", fg: "#dc2626" },
+  withdrawn: { label: "WITHDRAWN", bg: "#efeeea", fg: "#6b756f" }
+};
+
+const ATT = {
+  present: { label: "Present", short: "P", bg: "#dcfce7", fg: "#16a34a" },
+  half: { label: "Half day", short: "H", bg: "#fef3c7", fg: "#d97706" },
+  absent: { label: "Absent", short: "A", bg: "#fee2e2", fg: "#dc2626" },
+  wfh: { label: "WFH", short: "W", bg: "#dcfce7", fg: "#16a34a" },
+  leave: { label: "On leave", short: "L", bg: "#e0e7ff", fg: "#4338ca" },
+  short: { label: "Short leave", short: "S", bg: "#fce7f3", fg: "#be185d" }
+};
+
+const SCORES = {
+  u2: { total: 86, grade: "Strong", metrics: [["Attendance", 94, "182 of 194 working days"], ["Punctuality", 88, "9 late arrivals"], ["Leave discipline", 91, "1 unplanned absence"], ["Utilisation", 76, "Billable vs. available"]], ledger: [["Working days", "194"], ["Days present", "182"], ["WFH days", "21"], ["Leave taken", "12 days"], ["Half days", "4"], ["Unplanned absence", "1"]] },
+  u3: { total: 79, grade: "On track", metrics: [["Attendance", 89, "173 of 194 working days"], ["Punctuality", 74, "22 late arrivals"], ["Leave discipline", 82, "3 unplanned absences"], ["Utilisation", 84, "Billable vs. available"]], ledger: [["Working days", "194"], ["Days present", "173"], ["WFH days", "34"], ["Leave taken", "19 days"], ["Half days", "6"], ["Unplanned absence", "3"]] },
+  u4: { total: 92, grade: "Excellent", metrics: [["Attendance", 97, "188 of 194 working days"], ["Punctuality", 95, "3 late arrivals"], ["Leave discipline", 96, "None"], ["Utilisation", 81, "Billable vs. available"]], ledger: [["Working days", "194"], ["Days present", "188"], ["WFH days", "12"], ["Leave taken", "6 days"], ["Half days", "2"], ["Unplanned absence", "0"]] },
+  u5: { total: 71, grade: "Needs attention", metrics: [["Attendance", 84, "163 of 194 working days"], ["Punctuality", 68, "31 late arrivals"], ["Leave discipline", 70, "5 unplanned absences"], ["Utilisation", 62, "Billable vs. available"]], ledger: [["Working days", "194"], ["Days present", "163"], ["WFH days", "41"], ["Leave taken", "23 days"], ["Half days", "9"], ["Unplanned absence", "5"]] },
+  u6: { total: 88, grade: "Strong", metrics: [["Attendance", 93, "180 of 194 working days"], ["Punctuality", 91, "6 late arrivals"], ["Leave discipline", 89, "1 unplanned absence"], ["Utilisation", 88, "Billable vs. available"]], ledger: [["Working days", "194"], ["Days present", "180"], ["WFH days", "28"], ["Leave taken", "14 days"], ["Half days", "3"], ["Unplanned absence", "1"]] }
+};
+
+const REGIONS = ["Chennai", "Delhi"];
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function iso(y, m, d) {
+  return y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+}
+
+function seedAttendance(people) {
+  const out = {};
+  const exceptions = {
+    u2: { "2026-08-06": "half", "2026-08-11": "absent", "2026-08-17": "wfh" },
+    u3: { "2026-08-04": "half", "2026-08-10": "wfh" },
+    u4: { "2026-08-07": "absent", "2026-08-12": "half", "2026-08-17": "wfh" },
+    u5: { "2026-08-05": "absent", "2026-08-17": "half" },
+    u6: { "2026-08-13": "half", "2026-08-14": "wfh", "2026-08-17": "wfh" }
+  };
+  people.filter(p => p.role !== "admin").forEach(p => {
+    const rec = {};
+    for (let d = 1; d <= 17; d++) {
+      const key = iso(2026, 7, d);
+      const w = new Date(key + "T00:00:00").getDay();
+      if (w === 0 || w === 6) continue;
+      rec[key] = (exceptions[p.id] || {})[key] || "present";
+    }
+    out[p.id] = rec;
+  });
+  return out;
+}
+
+class Component extends DCLogic {
+  state = {
+    screen: "login",
+    meId: null,
+    tab: "approvals",
+    attendance: seedAttendance(PEOPLE),
+    markDate: "2026-08-17",
+    scoreUserId: null,
+    people: PEOPLE,
+    addOpen: false,
+    newPerson: { name: "", title: "", email: "", region: "Chennai", workMode: "WFO" },
+    documents: {},
+    calMonth: 7,
+    calYear: 2026,
+    filter: "pending",
+    selectedId: "r1",
+    draft: "",
+    form: { type: "Casual", from: "2026-08-24", to: "2026-08-26", reason: "" },
+    policies: [
+      { name: "Casual", note: "Short personal breaks, applied at least a day ahead.", days: 6, carry: false },
+      { name: "Sick", note: "No notice needed. Doctor's note past three days.", days: 6, carry: false },
+      { name: "Paid / annual", note: "Accrues monthly. Two weeks' notice for 5+ days.", days: 18, carry: true },
+      { name: "Short leave", note: "2 hours for a medical or personal emergency. Same-day, no notice needed.", days: 4, carry: false, unit: "uses" }
+    ],
+    wfhPolicy: { perMonth: 2, needsApproval: true },
+    holidays: [
+      { name: "New Year's Day", date: "2026-01-01", days: 1 },
+      { name: "Pongal", date: "2026-01-15", days: 1, region: "Chennai" },
+      { name: "Republic Day", date: "2026-01-26", days: 1 },
+      { name: "Holi", date: "2026-03-03", days: 1, region: "Delhi" },
+      { name: "Independence Day", date: "2026-08-15", days: 1 },
+      { name: "Gandhi Jayanti", date: "2026-10-02", days: 1 },
+      { name: "Diwali", date: "2026-11-08", days: 2 },
+      { name: "Christmas", date: "2026-12-25", days: 1 }
+    ],
+    holidayRegion: "Chennai",
+    rules: [
+      { label: "Auto-approve single-day sick leave", on: true },
+      { label: "Warn when two people from a team overlap", on: true },
+      { label: "Require a reason on every request", on: false }
+    ],
+    used: {
+      u2: { Casual: 4, Sick: 2, "Paid / annual": 6 },
+      u3: { Casual: 4, Sick: 1, "Paid / annual": 11 },
+      u4: { Casual: 2, Sick: 5, "Paid / annual": 3 },
+      u5: { Casual: 5, Sick: 0, "Paid / annual": 14 },
+      u6: { Casual: 1, Sick: 3, "Paid / annual": 8 }
+    },
+    requests: [
+      { id: "r1", userId: "u2", type: "Paid / annual", from: "2026-08-31", to: "2026-09-04", reason: "Family trip booked in June — flights are non-refundable. Handing the Larkin copy to Priya before I go.", status: "pending", thread: [] },
+      { id: "r2", userId: "u4", type: "Casual", from: "2026-08-20", to: "2026-08-20", reason: "House move.", status: "pending", thread: [{ by: "admin", text: "Can you push this a day? The Ferro edit ships Thursday.", at: "Aug 17" }] },
+      { id: "r3", userId: "u3", type: "Sick", from: "2026-08-17", to: "2026-08-18", reason: "Fever since last night.", status: "approved", thread: [{ by: "admin", text: "Rest up. I'll cover the Monday standup.", at: "Aug 17" }] },
+      { id: "r4", userId: "u5", type: "Paid / annual", from: "2026-08-24", to: "2026-08-28", reason: "Holiday.", status: "rejected", thread: [{ by: "admin", text: "Clashes with the Novara pitch week — can we look at the first week of September instead?", at: "Aug 14" }, { by: "user", text: "September 7–11 works for me. Reapplying now.", at: "Aug 15" }] },
+      { id: "r5", userId: "u6", type: "Casual", from: "2026-08-13", to: "2026-08-13", reason: "Visa appointment.", status: "approved", thread: [] }
+    ]
+  };
+
+  roster() { return (this.state.people || PEOPLE).filter(p => p.role !== "admin"); }
+
+  addDocuments(files) {
+    const uid = this.state.meId;
+    const names = Array.from(files || []).map(f => ({ id: "d" + Date.now() + Math.random(), name: f.name, size: f.size }));
+    if (!names.length) return;
+    this.setState(s => ({ documents: { ...s.documents, [uid]: [...(s.documents[uid] || []), ...names] } }));
+  }
+
+  removeDocument(id) {
+    const uid = this.state.meId;
+    this.setState(s => ({ documents: { ...s.documents, [uid]: (s.documents[uid] || []).filter(d => d.id !== id) } }));
+  }
+
+  addPerson() {
+    const n = this.state.newPerson;
+    const name = n.name.trim();
+    if (!name) return;
+    const id = "p" + Date.now();
+    const initials = name.split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+    const person = {
+      id, name, initials,
+      email: n.email.trim() || name.toLowerCase().replace(/[^a-z]+/g, ".") + "@stacx24.com",
+      title: n.title.trim() || "Team member",
+      role: "user",
+      region: n.region || "Chennai",
+      workMode: n.workMode || "WFO"
+    };
+    this.setState(s => ({
+      people: [...s.people, person],
+      used: { ...s.used, [id]: { Casual: 0, Sick: 0, "Paid / annual": 0 } },
+      attendance: { ...s.attendance, [id]: {} },
+      newPerson: { name: "", title: "", email: "", region: n.region, workMode: n.workMode },
+      addOpen: false
+    }));
+  }
+
+  me() { return (this.state.people || PEOPLE).find(p => p.id === this.state.meId); }
+  isAdmin() { return this.me() && this.me().role === "admin"; }
+  person(id) { return (this.state.people || PEOPLE).find(p => p.id === id) || PEOPLE[0]; }
+  policy(name) { return this.state.policies.find(p => p.name === name); }
+  allowance(name) { const p = this.policy(name); return p ? p.days : 0; }
+  usedBy(uid, type) { return (this.state.used[uid] || {})[type] || 0; }
+
+  isShort(type) { return type === "Short leave"; }
+
+  workdays(from, to) {
+    const a = new Date(from), b = new Date(to);
+    if (isNaN(a) || isNaN(b) || b < a) return 0;
+    let n = 0;
+    for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+      const w = d.getDay();
+      if (w !== 0 && w !== 6) n++;
+    }
+    return n;
+  }
+
+  fmt(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return "—";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  range(r) {
+    return r.from === r.to ? this.fmt(r.from) : this.fmt(r.from) + " – " + this.fmt(r.to);
+  }
+  days(r) { return this.isShort(r.type) ? 1 : this.workdays(r.from, r.to); }
+  usageUnit(type) { const p = this.policy(type); return p && p.unit === "uses" ? " use" : this.isShort(type) ? " use" : " days"; }
+
+  selected() { return this.state.requests.find(r => r.id === this.state.selectedId); }
+
+  onApprovedLeave(uid, dateKey) {
+    return this.state.requests.some(r => r.userId === uid && r.status === "approved" && r.from <= dateKey && r.to >= dateKey);
+  }
+
+  isRemote(uid) {
+    const p = this.person(uid);
+    return p && p.workMode === "WFH";
+  }
+
+  attStatus(uid, dateKey) {
+    const marked = (this.state.attendance[uid] || {})[dateKey];
+    if (marked) return marked;
+    if (this.onApprovedLeave(uid, dateKey)) return "leave";
+    if (this.isRemote(uid)) return "wfh";
+    return null;
+  }
+
+  attList(uid, dateKey) {
+    const st = this.attStatus(uid, dateKey);
+    return Array.isArray(st) ? st : st ? [st] : [];
+  }
+
+  mark(uid, dateKey, status) {
+    this.setState(s => {
+      const attendance = { ...s.attendance };
+      const rec = { ...(attendance[uid] || {}) };
+      const cur = rec[dateKey];
+      let combo = Array.isArray(cur) ? cur.slice() : cur ? [cur] : [];
+      const exclusive = status === "absent" || status === "leave";
+      if (combo.includes(status)) {
+        combo = combo.filter(x => x !== status);
+      } else if (exclusive) {
+        combo = [status];
+      } else {
+        combo = combo.filter(x => x !== "absent" && x !== "leave");
+        if (status === "short") combo = combo.filter(x => x !== "half");
+        if (status === "half") combo = combo.filter(x => x !== "short");
+        if (status === "present" || status === "wfh") combo = combo.filter(x => x !== "present" && x !== "wfh");
+        combo.push(status);
+      }
+      if (combo.length === 0) delete rec[dateKey];
+      else rec[dateKey] = combo.length === 1 ? combo[0] : combo;
+      attendance[uid] = rec;
+      return { attendance };
+    });
+  }
+
+  markAll(status) {
+    const key = this.state.markDate;
+    this.setState(s => {
+      const attendance = { ...s.attendance };
+      this.roster().forEach(p => {
+        if (this.onApprovedLeave(p.id, key)) return;
+        attendance[p.id] = { ...(attendance[p.id] || {}), [key]: status };
+      });
+      return { attendance };
+    });
+  }
+
+  shiftMonth(delta) {
+    this.setState(s => {
+      let m = s.calMonth + delta, y = s.calYear;
+      if (m < 0) { m = 11; y--; }
+      if (m > 11) { m = 0; y++; }
+      return { calMonth: m, calYear: y };
+    });
+  }
+
+  monthCells(uid) {
+    const { calYear: y, calMonth: m } = this.state;
+    const first = new Date(y, m, 1).getDay();
+    const total = new Date(y, m + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < first; i++) cells.push({ key: "pad" + i, day: "", bg: "transparent", fg: "transparent", border: "transparent", short: "", weight: "400" });
+    for (let d = 1; d <= total; d++) {
+      const key = iso(y, m, d);
+      const w = new Date(y, m, d).getDay();
+      const weekend = w === 0 || w === 6;
+      const list = weekend ? [] : this.attList(uid, key);
+      const meta = list.length ? ATT[list[0]] : null;
+      cells.push({
+        key,
+        day: d,
+        bg: weekend ? "#f8fafc" : meta ? meta.bg : "#121a2a",
+        fg: weekend ? "#cbd5e1" : meta ? meta.fg : "#6b756f",
+        border: weekend ? "#e2e8f0" : meta ? meta.bg : "#e2e8f0",
+        short: weekend ? "" : list.length ? list.map(k => ATT[k].short).join("") : "–",
+        weight: meta ? "600" : "400"
+      });
+    }
+    while (cells.length % 7 !== 0) cells.push({ key: "tail" + cells.length, day: "", bg: "transparent", fg: "transparent", border: "transparent", short: "", weight: "400" });
+    return cells;
+  }
+
+  setTab(tab) {
+    const first = tab === "approvals"
+      ? (this.state.requests.find(r => r.status === "pending") || {}).id
+      : tab === "requests"
+        ? (this.state.requests.filter(r => r.userId === this.state.meId)[0] || {}).id
+        : null;
+    this.setState({ tab, selectedId: first || null, draft: "" });
+  }
+
+  patchRequest(id, fn) {
+    this.setState(s => ({ requests: s.requests.map(r => (r.id === id ? fn(r) : r)) }));
+  }
+
+  decide(status) {
+    const r = this.selected();
+    if (!r) return;
+    const text = this.state.draft.trim();
+    const note = text || (status === "approved" ? "Approved — enjoy." : "Rejected. Let's find another window.");
+    if (status === "approved") {
+      this.setState(s => {
+        const used = { ...s.used };
+        used[r.userId] = { ...(used[r.userId] || {}) };
+        used[r.userId][r.type] = (used[r.userId][r.type] || 0) + this.days(r);
+        return { used };
+      });
+    }
+    this.patchRequest(r.id, x => ({ ...x, status, thread: [...x.thread, { by: "admin", text: note, at: "Aug 17" }] }));
+    this.setState({ draft: "" });
+  }
+
+  comment() {
+    const r = this.selected();
+    const text = this.state.draft.trim();
+    if (!r || !text) return;
+    const by = this.isAdmin() ? "admin" : "user";
+    this.patchRequest(r.id, x => ({ ...x, thread: [...x.thread, { by, text, at: "Aug 17" }] }));
+    this.setState({ draft: "" });
+  }
+
+  submitForm() {
+    const f = this.state.form;
+    if (!this.workdays(f.from, f.to)) return;
+    const id = "n" + Date.now();
+    this.setState(s => ({
+      requests: [{ id, userId: s.meId, type: f.type, from: f.from, to: f.to, reason: f.reason.trim() || "—", status: "pending", thread: [] }, ...s.requests],
+      tab: "requests",
+      selectedId: id,
+      form: { ...f, reason: "" }
+    }));
+  }
+
+  navItem(key, label, badge) {
+    const active = this.state.tab === key;
+    return {
+      key, label,
+      badge: badge || 0,
+      bg: active ? "#e2e8f0" : "transparent",
+      fg: active ? "#2e8b57" : "#6b756f",
+      onClick: () => this.setTab(key)
+    };
+  }
+
+  threadOf(r) {
+    if (!r) return [];
+    const admin = this.isAdmin();
+    return r.thread.map(m => ({
+      who: m.by === "admin" ? "Admin" : this.person(r.userId).name,
+      at: m.at,
+      text: m.text,
+      bg: m.by === "admin" ? "#e2e8f0" : "#dcece2",
+      align: (m.by === "admin") === admin ? "flex-end" : "flex-start"
+    }));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const me = this.me();
+    const admin = this.isAdmin();
+    const sel = this.selected();
+    const pending = s.requests.filter(r => r.status === "pending");
+    const mine = s.requests.filter(r => r.userId === s.meId);
+
+    const viewRegion = this.isAdmin() ? s.holidayRegion : ((this.me() && this.me().region) || "Chennai");
+    const regionHolidays = s.holidays
+      .filter(h => !h.region || h.region === viewRegion)
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+    const rowPerson = p => {
+      const st = this.attStatus(p.id, "2026-08-17");
+      const today = st === "leave" ? { label: "On leave", bg: ATT.leave.bg, fg: ATT.leave.fg }
+        : st === "wfh" ? { label: "WFH", bg: ATT.wfh.bg, fg: ATT.wfh.fg }
+        : st === "half" ? { label: "Half day", bg: ATT.half.bg, fg: ATT.half.fg }
+        : st === "absent" ? { label: "Absent", bg: ATT.absent.bg, fg: ATT.absent.fg }
+        : { label: "Working", bg: ATT.present.bg, fg: ATT.present.fg };
+      return {
+        name: p.name, initials: p.initials, title: p.title,
+        score: SCORES[p.id] ? SCORES[p.id].total : "—",
+        casual: (this.allowance("Casual") - this.usedBy(p.id, "Casual")) + " / " + this.allowance("Casual"),
+        sick: (this.allowance("Sick") - this.usedBy(p.id, "Sick")) + " / " + this.allowance("Sick"),
+        paid: (this.allowance("Paid / annual") - this.usedBy(p.id, "Paid / annual")) + " / " + this.allowance("Paid / annual"),
+        shortLeave: (this.allowance("Short leave") - this.usedBy(p.id, "Short leave")) + " / " + this.allowance("Short leave"),
+        today: today.label,
+        todayBg: today.bg,
+        todayFg: today.fg
+      };
+    };
+
+    const rowOf = r => {
+      const st = STATUS[r.status];
+      const p = this.person(r.userId);
+      const d = this.days(r);
+      return {
+        who: p.name, initials: p.initials, type: r.type,
+        range: this.range(r), daysLabel: d + (d === 1 ? " day" : " days"),
+        statusLabel: st.label, statusBg: st.bg, statusFg: st.fg,
+        rowBg: r.id === s.selectedId ? "#dcece2" : "#121a2a",
+        onOpen: () => this.setState({ selectedId: r.id, draft: "" })
+      };
+    };
+
+    const filtered = s.requests.filter(r => s.filter === "all" ? true : r.status === s.filter);
+    const selSt = sel ? STATUS[sel.status] : STATUS.pending;
+    const selDays = sel ? this.days(sel) : 0;
+    const selLeft = sel ? this.allowance(sel.type) - this.usedBy(sel.userId, sel.type) : 0;
+
+    const f = s.form;
+    const fDays = this.workdays(f.from, f.to);
+    const fLeft = me ? this.allowance(f.type) - this.usedBy(me.id, f.type) : 0;
+
+    const titles = {
+      approvals: ["Approvals", "Requests waiting on you, oldest first."],
+      attendance: ["Attendance", "Mark the day for everyone. Approved leave fills itself in."],
+      profile: ["My profile", "Your record on file. Ask your admin to change anything here."],
+      calendar: ["My attendance", "Every day since you joined the month."],
+      score: ["My score board", "Your year at Stacx24, 2026."],
+      team: ["Team", "Balances and who's out today."],
+      setup: ["Leave setup", "Policy the whole agency runs on."],
+      scores: ["Employee score board", "Pick someone to see their 2026 score."],
+      overview: ["Your leave", "Balances, replies, and the week ahead."],
+      apply: ["Apply for leave", "Two weeks' notice for anything over five days."],
+      requests: ["My requests", "Every request and its feedback thread."]
+    };
+    const t = titles[s.tab] || ["", ""];
+
+    return {
+      companyName: this.props.companyName ?? "Stacx24",
+      isLogin: s.screen === "login",
+      isApp: s.screen === "app",
+      today: "Mon, Aug 17 2026",
+      statTeam: PEOPLE.length,
+      statPending: pending.length,
+      statOut: 2,
+
+      accounts: [PEOPLE[0], PEOPLE[1], PEOPLE[2]].map(p => ({
+        name: p.name, email: p.email, initials: p.initials,
+        roleLabel: p.role === "admin" ? "ADMIN" : "MEMBER",
+        onPick: () => this.setState({
+          screen: "app", meId: p.id,
+          tab: p.role === "admin" ? "approvals" : "overview",
+          selectedId: p.role === "admin" ? (pending[0] || {}).id || null : (s.requests.filter(r => r.userId === p.id)[0] || {}).id || null,
+          draft: ""
+        })
+      })),
+
+      meName: me ? me.name : "",
+      meInitials: me ? me.initials : "",
+      meRoleLabel: me ? (admin ? "Administrator" : me.title) : "",
+      logout: () => this.setState({ screen: "login", meId: null, draft: "" }),
+
+      nav: admin
+        ? [this.navItem("approvals", "Approvals", pending.length), this.navItem("attendance", "Attendance"), this.navItem("team", "Team"), this.navItem("setup", "Leave setup"), this.navItem("scores", "Employee score board")]
+        : [this.navItem("profile", "My profile"), this.navItem("overview", "Overview"), this.navItem("calendar", "My attendance"), this.navItem("apply", "Apply for leave"), this.navItem("requests", "My requests"), this.navItem("score", "My score board")],
+
+      pageTitle: t[0], pageSub: t[1],
+      tabApprovals: s.tab === "approvals", tabTeam: s.tab === "team", tabSetup: s.tab === "setup",
+      tabOverview: s.tab === "overview", tabApply: s.tab === "apply", tabRequests: s.tab === "requests",
+      tabAttendance: s.tab === "attendance", tabCalendar: s.tab === "calendar", tabScore: s.tab === "score", tabScores: s.tab === "scores", tabProfile: s.tab === "profile",
+
+      profileName: me ? me.name : "",
+      profileInitials: me ? me.initials : "",
+      profileTitle: me ? me.title : "",
+      profileEmpId: me ? (me.empId || "—") : "",
+      profileRegion: me ? (me.region || "—") : "",
+      profileJoined: me ? (me.joined || "—") : "",
+      profileFields: me ? [
+        { section: "Contact", items: [
+          { label: "Work email", value: me.email },
+          { label: "Other email", value: me.personalEmail || "—" },
+          { label: "Contact number", value: me.phone || "—" },
+          { label: "Address", value: me.address || "—" }
+        ] },
+        { section: "Emergency", items: [
+          { label: "Contact name", value: me.emergencyName || "—" },
+          { label: "Contact number", value: me.emergencyPhone || "—" }
+        ] },
+        { section: "Role", items: [
+          { label: "Designation", value: me.title },
+          { label: "Reporting manager", value: me.manager || "Ananya Rao" },
+          { label: "Region", value: me.region || "—" },
+          { label: "Joined", value: me.joined || "—" }
+        ] }
+      ] : [],
+      profileDocs: (s.documents[s.meId] || []).map(d => ({
+        id: d.id, name: d.name,
+        size: d.size > 1024 * 1024 ? (d.size / (1024 * 1024)).toFixed(1) + " MB" : Math.max(1, Math.round(d.size / 1024)) + " KB",
+        onRemove: () => this.removeDocument(d.id)
+      })),
+      onDocsPicked: e => { this.addDocuments(e.target.files); e.target.value = ""; },
+      noDocs: (s.documents[s.meId] || []).length === 0,
+
+      scoreRoster: this.roster().map(p => {
+        const active = s.scoreUserId === p.id;
+        const sc = SCORES[p.id];
+        return {
+          name: p.name, initials: p.initials, title: p.title,
+          total: sc ? sc.total : "—",
+          bg: active ? "#dcece2" : "#121a2a",
+          border: active ? "#2e8b57" : "#e2e8f0",
+          onClick: () => this.setState({ scoreUserId: active ? null : p.id })
+        };
+      }),
+      hasScoreSel: !!s.scoreUserId,
+      noScoreSel: !s.scoreUserId,
+      selScoreName: s.scoreUserId ? this.person(s.scoreUserId).name : "",
+      selScoreTitle: s.scoreUserId ? this.person(s.scoreUserId).title : "",
+      selScoreTotal: s.scoreUserId && SCORES[s.scoreUserId] ? SCORES[s.scoreUserId].total : "—",
+      selScoreGrade: s.scoreUserId && SCORES[s.scoreUserId] ? SCORES[s.scoreUserId].grade : "No data yet",
+      selScoreMetrics: s.scoreUserId && SCORES[s.scoreUserId]
+        ? SCORES[s.scoreUserId].metrics.map(m => ({ label: m[0], value: m[1] + "%", pct: m[1] + "%", detail: m[2] }))
+        : [],
+      selScoreLedger: s.scoreUserId && SCORES[s.scoreUserId]
+        ? SCORES[s.scoreUserId].ledger.map(l => ({ label: l[0], value: l[1] }))
+        : [],
+
+      scoreTotal: "86",
+      scoreGrade: "Strong",
+      scoreNote: "Placeholder figures — wired up once the real data source is connected.",
+      scoreMetrics: [
+        { label: "Attendance", value: "94%", detail: "182 of 194 working days", pct: "94%" },
+        { label: "Punctuality", value: "88%", detail: "9 late arrivals this year", pct: "88%" },
+        { label: "Leave discipline", value: "91%", detail: "1 unplanned absence", pct: "91%" },
+        { label: "Utilisation", value: "76%", detail: "Billable vs. available hours", pct: "76%" }
+      ],
+      scoreQuarters: [
+        { label: "Q1", value: 82, height: "66px" },
+        { label: "Q2", value: 88, height: "78px" },
+        { label: "Q3", value: 86, height: "74px" },
+        { label: "Q4", value: 0, height: "6px" }
+      ],
+      scoreLedger: [
+        { label: "Working days", value: "194" },
+        { label: "Days present", value: "182" },
+        { label: "WFH days", value: "21" },
+        { label: "Leave taken", value: "12 days" },
+        { label: "Half days", value: "4" },
+        { label: "Unplanned absence", value: "1" }
+      ],
+
+      markDate: s.markDate,
+      markDateLabel: new Date(s.markDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+      onMarkDate: e => this.setState({ markDate: e.target.value }),
+      markIsWeekend: [0, 6].includes(new Date(s.markDate + "T00:00:00").getDay()),
+      markAllPresent: () => this.markAll("present"),
+      markSummary: (() => {
+        const roster = PEOPLE.filter(p => p.role !== "admin");
+        const counts = { present: 0, half: 0, wfh: 0, absent: 0, leave: 0, short: 0, unmarked: 0 };
+        roster.forEach(p => {
+          const list = this.attList(p.id, s.markDate);
+          if (list.length) list.forEach(k => counts[k]++); else counts.unmarked++;
+        });
+        counts.remoteAlways = roster.filter(p => this.isRemote(p.id)).length;
+        return [
+          { label: "Present", value: counts.present, bg: ATT.present.bg, fg: ATT.present.fg },
+          { label: "Half day", value: counts.half, bg: ATT.half.bg, fg: ATT.half.fg },
+          { label: "WFH", value: counts.wfh, bg: ATT.wfh.bg, fg: ATT.wfh.fg },
+          { label: "Absent", value: counts.absent, bg: ATT.absent.bg, fg: ATT.absent.fg },
+          { label: "On leave", value: counts.leave, bg: ATT.leave.bg, fg: ATT.leave.fg },
+          { label: "Short leave", value: counts.short, bg: ATT.short.bg, fg: ATT.short.fg },
+          { label: "Unmarked", value: counts.unmarked, bg: "#e2e8f0", fg: "#6b756f" }
+        ];
+      })(),
+      markGroups: ["WFO", "WFH"].map(mode => ({
+        mode,
+        modeLabel: mode === "WFH" ? "Work from home" : "Work from office",
+        rows: this.roster().filter(p => (p.workMode || "WFO") === mode).map(p => {
+        const remote = this.isRemote(p.id);
+        const list = this.attList(p.id, s.markDate);
+        const marked = (this.state.attendance[p.id] || {})[s.markDate];
+        const auto = !marked && list.includes("leave");
+        const autoWfh = !marked && list.includes("wfh") && remote;
+        return {
+          name: p.name, initials: p.initials, title: p.title,
+          note: auto ? "Approved leave" : autoWfh ? "Default (WFH)" : list.length ? list.map(k => ATT[k].label).join(" + ") : "Not marked yet",
+          noteFg: auto ? "#4338ca" : autoWfh ? "#16a34a" : "#6b756f",
+          locked: false,
+          options: (remote ? ["wfh", "half", "absent", "leave", "short"] : ["present", "wfh", "half", "absent", "leave", "short"]).map(k => ({
+            label: ATT[k].label,
+            bg: list.includes(k) ? ATT[k].bg : "#121a2a",
+            fg: list.includes(k) ? ATT[k].fg : "#6b756f",
+            border: list.includes(k) ? ATT[k].fg : "#e2e8f0",
+            onClick: () => this.mark(p.id, s.markDate, k)
+          }))
+        };
+      })
+      })).filter(g => g.rows.length),
+
+      calMonthLabel: MONTHS[s.calMonth] + " " + s.calYear,
+      onPrevMonth: () => this.shiftMonth(-1),
+      onNextMonth: () => this.shiftMonth(1),
+      weekdayLabels: ["S", "M", "T", "W", "T", "F", "S"].map((d, i) => ({ key: i, label: d })),
+      calCells: this.monthCells(s.meId),
+      calLegend: ["present", "half", "wfh", "absent", "leave", "short"].map(k => ({ label: ATT[k].label, bg: ATT[k].bg, fg: ATT[k].fg })),
+      calStats: (() => {
+        const rec = s.attendance[s.meId] || {};
+        const prefix = s.calYear + "-" + String(s.calMonth + 1).padStart(2, "0");
+        const keys = Object.keys(rec).filter(k => k.startsWith(prefix));
+        const n = st => keys.filter(k => rec[k] === st).length;
+        const worked = n("present") + n("half") * 0.5;
+        const total = keys.length + this.state.requests.filter(r => r.userId === s.meId && r.status === "approved").length;
+        return [
+          { label: "Days present", value: n("present") },
+          { label: "Half days", value: n("half") },
+          { label: "Absent", value: n("absent") },
+          { label: "Attendance", value: keys.length ? Math.round((worked / keys.length) * 100) + "%" : "—" }
+        ];
+      })(),
+
+      filters: [
+        { key: "pending", label: "Pending" },
+        { key: "approved", label: "Approved" },
+        { key: "rejected", label: "Rejected" },
+        { key: "all", label: "All" }
+      ].map(x => ({
+        label: x.label,
+        bg: s.filter === x.key ? "#2e8b57" : "#121a2a",
+        fg: s.filter === x.key ? "#ffffff" : "#4d574f",
+        border: s.filter === x.key ? "#2e8b57" : "#e2e8f0",
+        onClick: () => this.setState({ filter: x.key })
+      })),
+      queue: filtered.map(rowOf),
+      queueEmpty: filtered.length === 0,
+
+      myRequests: mine.map(rowOf),
+      myRequestsEmpty: mine.length === 0,
+
+      hasSelection: !!sel,
+      noSelection: !sel,
+      selWho: sel ? this.person(sel.userId).name : "",
+      selType: sel ? sel.type : "",
+      selRange: sel ? this.range(sel) : "",
+      selReason: sel ? sel.reason : "",
+      selStatusLabel: selSt.label, selStatusBg: selSt.bg, selStatusFg: selSt.fg,
+      selBalanceAfter: sel ? (sel.status === "approved" ? selLeft : selLeft - selDays) + this.usageUnit(sel.type) : "",
+      selThread: this.threadOf(sel),
+      selThreadEmpty: !sel || sel.thread.length === 0,
+      canDecide: !!sel && sel.status === "pending" && admin,
+      canCancel: !!sel && sel.status === "pending" && !admin,
+      draft: s.draft,
+      onDraft: e => this.setState({ draft: e.target.value }),
+      onApprove: () => this.decide("approved"),
+      onReject: () => this.decide("rejected"),
+      onComment: () => this.comment(),
+      onCancel: () => sel && this.patchRequest(sel.id, x => ({ ...x, status: "withdrawn" })),
+
+      addOpen: s.addOpen,
+      addClosed: !s.addOpen,
+      newName: s.newPerson.name,
+      newTitle: s.newPerson.title,
+      newEmail: s.newPerson.email,
+      onNewName: e => this.setState({ newPerson: { ...this.state.newPerson, name: e.target.value } }),
+      onNewTitle: e => this.setState({ newPerson: { ...this.state.newPerson, title: e.target.value } }),
+      onNewEmail: e => this.setState({ newPerson: { ...this.state.newPerson, email: e.target.value } }),
+      newRegion: s.newPerson.region,
+      onNewRegion: e => this.setState({ newPerson: { ...this.state.newPerson, region: e.target.value } }),
+      regionOptions: REGIONS.map(r => ({ value: r, label: r })),
+      newWorkMode: s.newPerson.workMode,
+      onNewWorkMode: e => this.setState({ newPerson: { ...this.state.newPerson, workMode: e.target.value } }),
+      workModeOptions: ["WFO", "WFH"].map(w => ({ value: w, label: w })),
+      openAdd: () => this.setState({ addOpen: true }),
+      cancelAdd: () => this.setState({ addOpen: false, newPerson: { name: "", title: "", email: "", region: "Chennai", workMode: "WFO" } }),
+      saveAdd: () => this.addPerson(),
+      rosterCount: this.roster().length + " people",
+      regionGroups: REGIONS.map(region => {
+        const members = this.roster().filter(p => (p.region || "Chennai") === region);
+        const out = members.filter(p => this.attStatus(p.id, "2026-08-17") === "leave").length;
+        return {
+          region,
+          countLabel: members.length + (members.length === 1 ? " person" : " people"),
+          outLabel: out ? out + " on leave today" : "everyone in",
+          rows: members.map(rowPerson)
+        };
+      }).filter(g => g.rows.length),
+
+      roster: this.roster().map(rowPerson),
+
+      policies: s.policies.map((p, i) => ({
+        name: p.name, note: p.note, days: p.days,
+        unitLabel: p.unit === "uses" ? "USES / YEAR" : "DAYS / YEAR",
+        carryLabel: p.carry ? "Allowed" : "Lapses",
+        carryBg: p.carry ? "#dcece2" : "#121a2a",
+        carryFg: p.carry ? "#2e8b57" : "#6b756f",
+        onDays: e => {
+          const v = parseInt(e.target.value, 10);
+          this.setState(st => ({ policies: st.policies.map((x, j) => (j === i ? { ...x, days: isNaN(v) ? 0 : v } : x)) }));
+        },
+        onToggle: () => this.setState(st => ({ policies: st.policies.map((x, j) => (j === i ? { ...x, carry: !x.carry } : x)) }))
+      })),
+
+      holidayRegion: admin ? s.holidayRegion : (me ? me.region || "Chennai" : "Chennai"),
+      holidayRegionTabs: REGIONS.map(r => ({
+        label: r,
+        bg: s.holidayRegion === r ? "#2e8b57" : "#121a2a",
+        fg: s.holidayRegion === r ? "#ffffff" : "#4d574f",
+        border: s.holidayRegion === r ? "#2e8b57" : "#e2e8f0",
+        onClick: () => this.setState({ holidayRegion: r })
+      })),
+      holidayTotal: regionHolidays.reduce((n, h) => n + h.days, 0),
+      holidayMonths: (() => {
+        const marks = {};
+        regionHolidays.forEach(h => {
+          const d = new Date(h.date + "T00:00:00");
+          for (let i = 0; i < h.days; i++) {
+            marks[iso(d.getFullYear(), d.getMonth(), d.getDate() + i)] = h.name;
+          }
+        });
+        return MONTHS.map((label, m) => {
+          const first = new Date(2026, m, 1).getDay();
+          const total = new Date(2026, m + 1, 0).getDate();
+          const cells = [];
+          for (let i = 0; i < first; i++) cells.push({ key: "p" + m + i, day: "", bg: "transparent", fg: "transparent", weight: "400" });
+          for (let d = 1; d <= total; d++) {
+            const key = iso(2026, m, d);
+            const hol = marks[key];
+            const weekend = [0, 6].includes(new Date(2026, m, d).getDay());
+            cells.push({
+              key,
+              day: d,
+              bg: hol ? "#2dd4bf" : "transparent",
+              fg: hol ? "#ffffff" : weekend ? "#4d574f" : "#4d574f",
+              weight: hol ? "600" : "400"
+            });
+          }
+          const names = regionHolidays.filter(h => h.date.slice(5, 7) === String(m + 1).padStart(2, "0"));
+          return {
+            key: m,
+            label: label.slice(0, 3),
+            dim: names.length ? "#17221c" : "#cbd5e1",
+            cells,
+            names: names.map(h => ({ name: h.name }))
+          };
+        });
+      })(),
+      holidayList: regionHolidays.map(h => {
+        const d = new Date(h.date + "T00:00:00");
+        const weekend = [0, 6].includes(d.getDay());
+        return {
+          name: h.name,
+          date: d.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
+          weekday: d.toLocaleDateString("en-US", { weekday: "short" }),
+          count: h.days === 2 ? "2 days" : "1 day",
+          countFg: h.days === 2 ? "#d97706" : "#6b756f",
+          countBg: h.days === 2 ? "#fef3c7" : "#f1f5f9",
+          nameFg: weekend ? "#6b756f" : "#17221c",
+          note: h.note || (weekend ? "Falls on a weekend" : "")
+        };
+      }),
+
+      wfhPerMonth: s.wfhPolicy.perMonth,
+      wfhPerYear: s.wfhPolicy.perMonth * 12 + " days a year",
+      wfhApprovalLabel: s.wfhPolicy.needsApproval ? "Required" : "Not needed",
+      wfhApprovalBg: s.wfhPolicy.needsApproval ? "#dcece2" : "#121a2a",
+      wfhApprovalFg: s.wfhPolicy.needsApproval ? "#4f6136" : "#6b756f",
+      onWfhDays: e => {
+        const v = parseInt(e.target.value, 10);
+        this.setState(st => ({ wfhPolicy: { ...st.wfhPolicy, perMonth: isNaN(v) ? 0 : v } }));
+      },
+      onWfhApproval: () => this.setState(st => ({ wfhPolicy: { ...st.wfhPolicy, needsApproval: !st.wfhPolicy.needsApproval } })),
+
+      rules: s.rules.map((r, i) => ({
+        label: r.label,
+        trackBg: r.on ? "#2dd4bf" : "#d6d4ce",
+        justify: r.on ? "flex-end" : "flex-start",
+        onToggle: () => this.setState(st => ({ rules: st.rules.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) }))
+      })),
+
+      balances: s.policies.map(p => {
+        const left = p.days - this.usedBy(s.meId, p.name);
+        return { name: p.name, left, total: p.days, pct: Math.max(0, Math.min(100, (left / p.days) * 100)) + "%" };
+      }),
+
+      needsReply: mine
+        .filter(r => r.thread.length && r.thread[r.thread.length - 1].by === "admin")
+        .map(r => ({
+          title: r.type + " · " + this.range(r),
+          text: r.thread[r.thread.length - 1].text,
+          onOpen: () => this.setState({ tab: "requests", selectedId: r.id, draft: "" })
+        })),
+      needsReplyEmpty: mine.filter(r => r.thread.length && r.thread[r.thread.length - 1].by === "admin").length === 0,
+
+      outThisWeek: s.requests
+        .filter(r => r.status === "approved" && r.to >= "2026-08-17")
+        .map(r => ({ name: this.person(r.userId).name, initials: this.person(r.userId).initials, range: this.range(r) })),
+
+      typeOptions: s.policies.map(p => ({ value: p.name, label: p.name })),
+      formType: f.type, formFrom: f.from, formTo: f.to, formReason: f.reason,
+      onFormType: e => this.setState({ form: { ...this.state.form, type: e.target.value } }),
+      onFormFrom: e => this.setState({ form: { ...this.state.form, from: e.target.value } }),
+      onFormTo: e => this.setState({ form: { ...this.state.form, to: e.target.value } }),
+      onFormReason: e => this.setState({ form: { ...this.state.form, reason: e.target.value } }),
+      onSubmit: () => this.submitForm(),
+      formIsShort: this.isShort(f.type),
+      formNotShort: !this.isShort(f.type),
+      formDays: this.isShort(f.type) ? "2 hrs" : fDays,
+      formUnitLabel: this.isShort(f.type) ? "one-time use" : "working days",
+      formBalance: fLeft + this.usageUnit(f.type),
+      formAfter: (fLeft - (this.isShort(f.type) ? 1 : fDays)) + this.usageUnit(f.type),
+      formHint: (this.isShort(f.type) ? 1 : fDays) > fLeft ? "Over your balance — admin will see the shortfall." : "Goes straight to " + PEOPLE[0].name + ".",
+      approverName: PEOPLE[0].name
+    };
+  }
+}
+
+</script>
+</body>
+</html>
