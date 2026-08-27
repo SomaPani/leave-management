@@ -1,0 +1,49 @@
+// Data model for the multi-tenant organization backbone.
+//
+// These models live in the `orgapp` Postgres schema, set by the `schema`
+// parameter on the connection URL — see lib/prisma-url.ts. Prisma manages this
+// schema and nothing else in the database.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  MEMBER
+}
+
+model Organization {
+  id String @id @default(cuid())
+
+  // Unique so the seed can upsert by name and re-run without duplicating.
+  name      String   @unique
+  createdAt DateTime @default(now())
+  users     User[]
+}
+
+model User {
+  id           String @id @default(cuid())
+  name         String
+  email        String @unique
+  passwordHash String
+  role         Role
+
+  // Null ONLY for SUPERADMIN; required for ADMIN and MEMBER. Enforced in
+  // application logic (lib/rbac.ts) — the column itself has to stay nullable
+  // to allow the SuperAdmin row.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  // Audit: who created this user. Null for CLI-created SuperAdmins.
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([organizationId])
+}
