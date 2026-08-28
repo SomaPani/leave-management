@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import { RequestThread } from "@/components/request-thread";
 import {
@@ -9,21 +10,20 @@ import {
   primaryButtonClass,
   textareaClass,
 } from "@/components/ui";
-import { updateOwnRequest } from "@/lib/actions";
+import { demoUpdateOwnRequest as updateOwnRequest } from "@/lib/demo-actions";
 import { formatRange } from "@/lib/date";
 import { dayCountLabel, requestDays, requestsFor } from "@/lib/domain";
-import { requireMember } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { demoDb, demoMember } from "@/lib/demo-data";
 
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ r?: string }>;
+  searchParams: Promise<{ r?: string; demo?: string }>;
 }) {
-  const user = await requireMember();
   const params = await searchParams;
 
-  const db = await readDb();
+  const db = demoDb();
+  const user = demoMember(db);
   const mine = requestsFor(db, user.id);
   const selected = mine.find((request) => request.id === params.r) ?? mine[0] ?? null;
 
@@ -34,6 +34,8 @@ export default async function RequestsPage({
         subtitle="Every request and its feedback thread."
         meta="MEMBER VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <Card className="overflow-hidden">

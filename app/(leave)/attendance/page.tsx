@@ -1,7 +1,11 @@
+import { DemoBanner } from "@/components/demo-banner";
 import { DateNav } from "@/components/date-nav";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, Card, inputClass, primaryButtonClass } from "@/components/ui";
-import { markAttendance, markEveryonePresent } from "@/lib/actions";
+import {
+  demoMarkAttendance as markAttendance,
+  demoMarkEveryonePresent as markEveryonePresent,
+} from "@/lib/demo-actions";
 import { TODAY, formatLong, isValidDate, isWeekend } from "@/lib/date";
 import {
   attendanceCodes,
@@ -11,8 +15,7 @@ import {
   onApprovedLeave,
   roster,
 } from "@/lib/domain";
-import { requireAdmin } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { seedDb } from "@/lib/seed";
 import { ATTENDANCE_ORDER, ATTENDANCE_STYLE } from "@/lib/ui";
 import type { AttendanceCode, WorkMode } from "@/lib/types";
 
@@ -24,15 +27,13 @@ const MODES: { key: WorkMode; label: string }[] = [
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; demo?: string }>;
 }) {
-  await requireAdmin();
-
   const params = await searchParams;
   const date =
     params.date && isValidDate(params.date) ? params.date : TODAY;
 
-  const db = await readDb();
+  const db = seedDb();
   const people = roster(db);
 
   const counts: Record<AttendanceCode | "unmarked", number> = {
@@ -57,6 +58,8 @@ export default async function AttendancePage({
         title="Attendance"
         subtitle="Mark the day for everyone. Approved leave fills itself in."
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="flex max-w-[900px] flex-col gap-5">
         <Card className="flex flex-wrap items-center gap-5 px-5 py-4.5">

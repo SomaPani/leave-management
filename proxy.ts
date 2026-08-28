@@ -21,16 +21,26 @@ import { auth } from "@/lib/auth";
 
 const HOME_FOR_ROLE = {
   SUPERADMIN: "/organizations",
-  ADMIN: "/members",
-  MEMBER: "/account",
+  ADMIN: "/approvals",
+  MEMBER: "/overview",
 } as const;
 
 /** Which roles may see each guarded prefix. */
 const ALLOWED: { prefix: string; roles: readonly string[] }[] = [
   { prefix: "/organizations", roles: ["SUPERADMIN"] },
   { prefix: "/admins", roles: ["SUPERADMIN"] },
+  { prefix: "/approvals", roles: ["ADMIN"] },
+  { prefix: "/attendance", roles: ["ADMIN"] },
+  { prefix: "/team", roles: ["ADMIN"] },
+  { prefix: "/setup", roles: ["ADMIN"] },
+  { prefix: "/scores", roles: ["ADMIN"] },
   { prefix: "/members", roles: ["ADMIN"] },
-  { prefix: "/account", roles: ["MEMBER"] },
+  { prefix: "/profile", roles: ["MEMBER"] },
+  { prefix: "/overview", roles: ["MEMBER"] },
+  { prefix: "/calendar", roles: ["MEMBER"] },
+  { prefix: "/apply", roles: ["MEMBER"] },
+  { prefix: "/requests", roles: ["MEMBER"] },
+  { prefix: "/score", roles: ["MEMBER"] },
 ];
 
 export default auth((request) => {
@@ -38,14 +48,14 @@ export default auth((request) => {
   const user = request.auth?.user;
 
   if (!user) {
-    const signIn = new URL("/signin", request.nextUrl);
+    const signIn = new URL("/login", request.nextUrl);
     signIn.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(signIn);
   }
 
   const rule = ALLOWED.find((entry) => pathname.startsWith(entry.prefix));
   if (rule && !rule.roles.includes(user.role)) {
-    const home = HOME_FOR_ROLE[user.role as keyof typeof HOME_FOR_ROLE] ?? "/signin";
+    const home = HOME_FOR_ROLE[user.role as keyof typeof HOME_FOR_ROLE] ?? "/login";
     return NextResponse.redirect(new URL(home, request.nextUrl));
   }
 
@@ -54,9 +64,19 @@ export default auth((request) => {
 
 export const config = {
   matcher: [
+    "/approvals/:path*",
+    "/attendance/:path*",
+    "/team/:path*",
+    "/setup/:path*",
+    "/scores/:path*",
     "/organizations/:path*",
     "/admins/:path*",
     "/members/:path*",
-    "/account/:path*",
+    "/profile/:path*",
+    "/overview/:path*",
+    "/calendar/:path*",
+    "/apply/:path*",
+    "/requests/:path*",
+    "/score/:path*",
   ],
 };

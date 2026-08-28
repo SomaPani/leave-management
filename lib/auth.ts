@@ -64,7 +64,7 @@ export const authConfig: NextAuthConfig = {
   // Self-hosted behind Docker/localhost rather than on a known deployment host.
   trustHost: true,
   session: { strategy: "jwt" },
-  pages: { signIn: "/signin" },
+  pages: { signIn: "/login" },
   providers: [
     Credentials({
       name: "Email and password",

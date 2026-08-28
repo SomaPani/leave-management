@@ -1,9 +1,12 @@
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
 import { Card, Detail, MonoLabel } from "@/components/ui";
-import { removeDocument, uploadDocuments } from "@/lib/actions";
-import { requireMember } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import {
+  demoRemoveDocument as removeDocument,
+  demoUploadDocuments as uploadDocuments,
+} from "@/lib/demo-actions";
+import { demoDb, demoMember } from "@/lib/demo-data";
 
 function formatSize(bytes: number): string {
   return bytes > 1024 * 1024
@@ -11,9 +14,14 @@ function formatSize(bytes: number): string {
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-export default async function ProfilePage() {
-  const user = await requireMember();
-  const db = await readDb();
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string }>;
+}) {
+  const params = await searchParams;
+  const db = demoDb();
+  const user = demoMember(db);
   const documents = db.documents[user.id] ?? [];
 
   const groups = [
@@ -51,6 +59,8 @@ export default async function ProfilePage() {
         subtitle="Your record on file. Ask your admin to change anything here."
         meta="MEMBER VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="flex max-w-[900px] flex-col gap-5">
         <Card className="flex flex-wrap items-center gap-6 px-7 py-6">

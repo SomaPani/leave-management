@@ -1,19 +1,20 @@
 import { ApplyForm, type ApplyOption } from "@/components/apply-form";
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
-import { submitLeaveRequest } from "@/lib/actions";
+import { demoSubmitLeaveRequest as submitLeaveRequest } from "@/lib/demo-actions";
 import { TODAY, addDays } from "@/lib/date";
 import { balanceOf } from "@/lib/domain";
-import { requireMember } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { demoDb, demoMember } from "@/lib/demo-data";
 
 export default async function ApplyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; demo?: string }>;
 }) {
-  const user = await requireMember();
-  const { error } = await searchParams;
-  const db = await readDb();
+  const params = await searchParams;
+  const { error } = params;
+  const db = demoDb();
+  const user = demoMember(db);
 
   const options: ApplyOption[] = db.policies.map((policy) => ({
     name: policy.name,
@@ -32,6 +33,8 @@ export default async function ApplyPage({
         subtitle="Two weeks' notice for anything over five days."
         meta="MEMBER VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       {error ? (
         <p className="rounded-lg border border-danger-line bg-danger-tint px-3.5 py-2.5 text-sm text-danger">

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import {
   Avatar,
@@ -9,12 +10,10 @@ import {
   primaryButtonClass,
   selectClass,
 } from "@/components/ui";
-import { addTeamMember } from "@/lib/actions";
+import { demoAddTeamMember as addTeamMember } from "@/lib/demo-actions";
 import { TODAY } from "@/lib/date";
 import { attendanceCodes, balanceOf, allowance, roster } from "@/lib/domain";
-import { REGIONS, SCORES } from "@/lib/seed";
-import { requireAdmin } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { REGIONS, SCORES, seedDb } from "@/lib/seed";
 import { todayPill } from "@/lib/ui";
 
 const COLUMNS = "grid-cols-[1.6fr_0.7fr_repeat(4,1fr)]";
@@ -22,14 +21,12 @@ const COLUMNS = "grid-cols-[1.6fr_0.7fr_repeat(4,1fr)]";
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ add?: string; error?: string }>;
+  searchParams: Promise<{ add?: string; error?: string; demo?: string }>;
 }) {
-  await requireAdmin();
-
   const params = await searchParams;
   const addOpen = params.add === "1";
 
-  const db = await readDb();
+  const db = seedDb();
   const people = roster(db);
 
   const balanceCell = (userId: string, type: string) =>
@@ -42,6 +39,8 @@ export default async function TeamPage({
         subtitle="Balances and who's out today."
         meta="ADMIN VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="flex flex-col gap-5">
         <div className="flex items-center justify-between gap-4">

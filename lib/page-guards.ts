@@ -15,13 +15,13 @@ import type { Actor } from "@/lib/rbac";
 
 export const HOME_FOR_ROLE: Record<Role, string> = {
   SUPERADMIN: "/organizations",
-  ADMIN: "/members",
-  MEMBER: "/account",
+  ADMIN: "/approvals",
+  MEMBER: "/overview",
 };
 
 export async function requirePageActor(): Promise<Actor> {
   const actor = await currentActor();
-  if (!actor) redirect("/signin");
+  if (!actor) redirect("/login");
   return actor;
 }
 

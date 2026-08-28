@@ -41,19 +41,23 @@ export async function signInAction(form: FormData): Promise<void> {
     await signIn("credentials", {
       email,
       password,
-      redirectTo: callbackUrl || "/account",
+      // "/" dispatches on the role the sign-in just established — an Admin
+      // lands on /members, a SuperAdmin on /organizations, a Member on
+      // /account. Hard-coding one of those here sent the other roles through
+      // a needless proxy bounce.
+      redirectTo: callbackUrl || "/",
     });
   } catch (error) {
     // signIn throws a redirect on success — it must be allowed through.
     if (error instanceof AuthError) {
-      redirect("/signin?error=Invalid+email+or+password");
+      redirect("/login?error=Invalid+email+or+password");
     }
     throw error;
   }
 }
 
 export async function signOutAction(): Promise<void> {
-  await signOut({ redirectTo: "/signin" });
+  await signOut({ redirectTo: "/login" });
 }
 
 export async function createOrganizationAction(form: FormData): Promise<void> {

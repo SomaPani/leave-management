@@ -1,21 +1,18 @@
 import Link from "next/link";
 
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, Card, EmptyPanel, Meter, MonoLabel } from "@/components/ui";
 import { personById, roster } from "@/lib/domain";
-import { SCORES } from "@/lib/seed";
-import { requireAdmin } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { SCORES, seedDb } from "@/lib/seed";
 
 export default async function ScoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ u?: string }>;
+  searchParams: Promise<{ u?: string; demo?: string }>;
 }) {
-  await requireAdmin();
-
   const params = await searchParams;
-  const db = await readDb();
+  const db = seedDb();
   const people = roster(db);
 
   const selected = params.u ? (personById(db, params.u) ?? null) : null;
@@ -28,6 +25,8 @@ export default async function ScoresPage({
         subtitle="Pick someone to see their 2026 score."
         meta="ADMIN VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="grid max-w-[940px] items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="flex flex-col gap-2">

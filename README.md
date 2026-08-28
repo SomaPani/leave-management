@@ -16,14 +16,14 @@ docker compose up -d        # postgres 18 on localhost:5432
 npm run migrate             # creates the `orgapp` schema and its tables
 npm run create-superadmin   # CLI-only; reads SUPERADMIN_* from .env
 npm run seed                # default Stacx organization + its admin
-npm run dev                 # http://localhost:3000/signin
+npm run dev                 # http://localhost:3000/login
 ```
 
 `npm run build` / `npm start` for production, `npm test` for the test suite.
 
 > **The leave-management app no longer runs.** Its `public` tables were dropped
 > when this repo was narrowed to the organization backbone. The code is still
-> here (`app/(dashboard)`, `app/login`, `lib/store.ts`, `lib/db.ts`,
+> here (`app/(dashboard)`, `lib/store.ts`, `lib/db.ts`,
 > `lib/domain.ts`, `lib/seed.ts`, `lib/session.ts`) and still compiles, but every
 > one of those screens errors, because the tables it queries are gone. See
 > [the implementation notes](./Docs/2026-08-27-multi-tenant-org-rbac-implementation-notes.md)
@@ -36,7 +36,6 @@ errors at runtime: the `public` tables they query were dropped.
 
 | Route         | Who     | What                                                          |
 | ------------- | ------- | ------------------------------------------------------------- |
-| `/login`      | anyone  | Account picker                                                |
 | `/approvals`  | admin   | Request queue, filters, decision + feedback thread            |
 | `/attendance` | admin   | Mark a day for the whole team                                 |
 | `/team`       | admin   | Roster by region, balances, add a teammate                    |
@@ -115,7 +114,7 @@ where the implementation departs from that design, and why, is recorded in
 
 | Route            | Who        | What                                    |
 | ---------------- | ---------- | --------------------------------------- |
-| `/signin`        | anyone     | Email + password sign-in                |
+| `/login`         | anyone     | Email + password log-in                 |
 | `/organizations` | superadmin | Every organization, and create one      |
 | `/admins`        | superadmin | Create an admin, assigned to an org     |
 | `/members`       | admin      | Their own org's members, and add one    |

@@ -1,12 +1,16 @@
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import { Card, Meter, MonoLabel } from "@/components/ui";
 import { MY_SCORE } from "@/lib/seed";
-import { requireMember } from "@/lib/session";
 
 const CHART_HEIGHT = 96;
 
-export default async function ScorePage() {
-  await requireMember();
+export default async function ScorePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string }>;
+}) {
+  const params = await searchParams;
 
   return (
     <>
@@ -15,6 +19,8 @@ export default async function ScorePage() {
         subtitle="Your year at Stacx24, 2026."
         meta="MEMBER VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="flex max-w-[940px] flex-col gap-5">
         <div className="grid items-stretch gap-5 lg:grid-cols-[280px_1fr]">

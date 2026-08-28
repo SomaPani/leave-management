@@ -1,15 +1,20 @@
 import Link from "next/link";
 
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, Card, Meter, MonoLabel } from "@/components/ui";
 import { TODAY, formatRange } from "@/lib/date";
 import { balanceOf, outFrom, requestsFor } from "@/lib/domain";
-import { requireMember } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { demoDb, demoMember } from "@/lib/demo-data";
 
-export default async function OverviewPage() {
-  const user = await requireMember();
-  const db = await readDb();
+export default async function OverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string }>;
+}) {
+  const params = await searchParams;
+  const db = demoDb();
+  const user = demoMember(db);
 
   const balances = db.policies.map((policy) => {
     const left = balanceOf(db, user.id, policy.name);
@@ -35,6 +40,8 @@ export default async function OverviewPage() {
         subtitle="Balances, replies, and the week ahead."
         meta={`MEMBER VIEW · ${user.name.toUpperCase()}`}
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">

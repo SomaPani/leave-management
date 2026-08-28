@@ -1,118 +1,119 @@
-
 import { redirect } from "next/navigation";
 
-import { signIn } from "@/lib/actions";
-import { TODAY } from "@/lib/date";
-import { attendanceCodes, pendingRequests, roster } from "@/lib/domain";
-import { COMPANY_NAME, DEMO_ACCOUNT_IDS } from "@/lib/seed";
-import { getCurrentUser, homePathFor } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { inputClass, primaryButtonClass } from "@/components/ui";
+import { currentActor } from "@/lib/auth";
+import { signInAction } from "@/lib/org-actions";
+import { HOME_FOR_ROLE } from "@/lib/page-guards";
+import { COMPANY_NAME } from "@/lib/seed";
+
+/**
+ * Email + password log-in — the application's only sign-in screen.
+ *
+ * Credentials are checked against `orgapp."User"` in `lib/auth.ts`: the row is
+ * looked up by email and the password compared against its bcrypt hash. Every
+ * role signs in here; `signInAction` posts to `/`, which dispatches on the role
+ * the sign-in just established.
+ *
+ * This path used to hold the leave-management account picker, which signed a
+ * `Person` in against tables that no longer exist.
+ */
+
+/** Auth.js sends its own opaque code when the callback is posted directly. */
+function readError(error: string | undefined): string | null {
+  if (!error) return null;
+  return error === "CredentialsSignin" ? "Invalid email or password." : error;
+}
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
-  const signedIn = await getCurrentUser();
-  if (signedIn) redirect(homePathFor(signedIn));
+  const actor = await currentActor();
+  if (actor) redirect(HOME_FOR_ROLE[actor.role]);
 
-  const { error } = await searchParams;
-  const db = await readDb();
-
-  const accounts = DEMO_ACCOUNT_IDS.map((id) =>
-    db.people.find((p) => p.id === id),
-  ).filter((p) => p !== undefined);
-
-  const outToday = roster(db).filter((p) =>
-    attendanceCodes(db, p.id, TODAY).includes("leave"),
-  ).length;
-
-  const stats = [
-    { value: db.people.length, label: "PEOPLE" },
-    { value: pendingRequests(db).length, label: "PENDING" },
-    { value: outToday, label: "OUT TODAY" },
-  ];
+  const { error, callbackUrl } = await searchParams;
+  const message = readError(error);
 
   return (
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.15fr_1fr]">
-      <div className="flex flex-col justify-between gap-12 bg-brand-deep p-10 text-white lg:p-16">
+      <div className="hidden flex-col justify-between gap-12 bg-brand-deep p-10 text-white lg:flex lg:p-16">
         <div className="font-mono text-[13px] tracking-[0.16em] text-brand-mute uppercase">
           {COMPANY_NAME}
         </div>
-
-        <div className="flex max-w-[460px] flex-col gap-6">
-          <h1 className="text-[46px] leading-[1.05] font-medium tracking-[-0.02em] text-pretty">
-            Leave Management, Without the Hassle
+        <div className="flex flex-col gap-4">
+          <h1 className="text-4xl leading-tight font-semibold">
+            Organization administration
           </h1>
-          <p className="text-base leading-relaxed text-brand-mute text-pretty">
-            Apply, approve, and settle it in one place. Balances update the moment a
-            request is decided.
+          <p className="max-w-md text-[15px] text-brand-mute">
+            Sign in to manage organizations, administrators and members. Your
+            access is scoped to the role your account holds.
           </p>
         </div>
-
-        <dl className="flex gap-10 font-mono text-xs text-brand-mute">
-          {stats.map((stat) => (
-            <div key={stat.label} className="flex flex-col gap-1.5">
-              <dd className="text-[22px] text-white">{stat.value}</dd>
-              <dt>{stat.label}</dt>
-            </div>
-          ))}
-        </dl>
+        <div className="font-mono text-xs tracking-[0.12em] text-brand-mute/70 uppercase">
+          Authorized access only
+        </div>
       </div>
 
-      <div className="flex items-center justify-center p-8 lg:p-12">
-        <div className="flex w-full max-w-[380px] flex-col gap-7">
-          <div className="flex flex-col gap-2">
-            <h2 className="text-2xl font-semibold tracking-[-0.01em]">Sign in</h2>
-            <p className="text-sm text-muted">Choose an account to continue.</p>
+      <main className="flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-16">
+        <div className="mx-auto w-full max-w-sm">
+          <div className="mb-8 font-mono text-[13px] tracking-[0.16em] text-brand uppercase lg:hidden">
+            {COMPANY_NAME}
           </div>
 
-          {error ? (
-            <p className="rounded-lg border border-danger-line bg-danger-tint px-3 py-2 text-sm text-danger">
-              That account no longer exists. Pick another one.
+          <h2 className="text-2xl font-semibold text-ink">Log in</h2>
+          <p className="mt-1.5 text-sm text-muted">
+            Enter the email and password for your account.
+          </p>
+
+          {message ? (
+            <p
+              role="alert"
+              className="mt-6 rounded-lg border border-danger-line bg-danger-tint px-3 py-2.5 text-sm text-danger"
+            >
+              {message}
             </p>
           ) : null}
 
-          <div className="flex flex-col gap-2.5">
-            {accounts.map((account) => (
-              <form key={account.id} action={signIn}>
-                <input type="hidden" name="userId" value={account.id} />
-                <button
-                  type="submit"
-                  className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] border border-line bg-surface px-4 py-3.5 text-left transition-[border-color,box-shadow] hover:border-brand hover:shadow-[0_1px_0_var(--color-brand)]"
-                >
-                  <span className="flex size-[38px] items-center justify-center rounded-full bg-brand-tint text-[13px] font-semibold tracking-[0.04em] text-brand">
-                    {account.initials}
-                  </span>
-                  <span className="flex flex-1 flex-col gap-0.5">
-                    <span className="text-sm font-semibold">{account.name}</span>
-                    <span className="text-xs text-muted">{account.email}</span>
-                  </span>
-                  <span className="rounded-md border border-line px-[7px] py-1 font-mono text-[10px] tracking-[0.12em] text-muted">
-                    {account.role === "admin" ? "ADMIN" : "MEMBER"}
-                  </span>
-                </button>
-              </form>
-            ))}
-          </div>
+          <form action={signInAction} className="mt-6 flex flex-col gap-4">
+            <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />
 
-          <div className="flex flex-col gap-3 border-t border-line pt-5">
-            <label className="flex flex-col gap-1.5 text-xs text-muted">
-              Password
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-ink-2">Email</span>
               <input
-                type="password"
-                defaultValue="demo-password"
-                readOnly
-                aria-readonly
-                className="rounded-lg border border-line bg-surface px-3 py-2.5 text-sm"
+                name="email"
+                type="email"
+                required
+                autoComplete="username"
+                autoFocus
+                placeholder="you@company.com"
+                className={inputClass}
               />
             </label>
-            <p className="text-xs text-muted">
-              Demo prototype — pick any account above.
-            </p>
-          </div>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-ink-2">Password</span>
+              <input
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className={inputClass}
+              />
+            </label>
+
+            <button type="submit" className={`${primaryButtonClass} mt-2`}>
+              Log in
+            </button>
+          </form>
+
+          <p className="mt-8 text-[13px] text-muted">
+            Accounts are created for you — an administrator by a super admin, a
+            member by their organization&rsquo;s administrator.
+          </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import { RequestThread } from "@/components/request-thread";
 import {
@@ -13,8 +14,8 @@ import {
   primaryButtonClass,
   textareaClass,
 } from "@/components/ui";
-import { reviewRequest } from "@/lib/actions";
 import { formatRange } from "@/lib/date";
+import { demoReviewRequest } from "@/lib/demo-actions";
 import {
   balanceOf,
   dayCountLabel,
@@ -22,9 +23,22 @@ import {
   personOrFallback,
   requestDays,
 } from "@/lib/domain";
-import { requireAdmin } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { seedDb } from "@/lib/seed";
 import type { RequestStatus } from "@/lib/types";
+
+/**
+ * Admin approvals — demo data.
+ *
+ * Every figure on this page comes from `seedDb()`, the in-memory fixture in
+ * lib/seed.ts. Nothing is read from or written to Postgres: the tables this
+ * screen was originally built against were dropped, and the `orgapp` schema
+ * models organizations and users only, with no leave request of any kind.
+ *
+ * So the layout, filters and detail panel are real; the records are not, and
+ * Approve / Reject / Send comment do not persist. Making them persist means
+ * choosing a data source first — restore the old tables, or add leave models to
+ * prisma/schema.prisma — after which the `seedDb()` call below becomes a query.
+ */
 
 const FILTERS = [
   { key: "pending", label: "Pending" },
@@ -35,19 +49,18 @@ const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
+
 export default async function ApprovalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; r?: string }>;
+  searchParams: Promise<{ filter?: string; r?: string; demo?: string }>;
 }) {
-  await requireAdmin();
-
   const params = await searchParams;
   const filter: FilterKey = FILTERS.some((f) => f.key === params.filter)
     ? (params.filter as FilterKey)
     : "pending";
 
-  const db = await readDb();
+  const db = seedDb();
   const queue = db.requests.filter((request) =>
     filter === "all" ? true : request.status === (filter as RequestStatus),
   );
@@ -64,6 +77,8 @@ export default async function ApprovalsPage({
         title="Approvals"
         subtitle="Requests waiting on you, oldest first."
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="grid items-start gap-6 xl:grid-cols-[1.25fr_1fr]">
         <Card className="overflow-hidden">
@@ -168,8 +183,9 @@ export default async function ApprovalsPage({
                     </p>
                   </div>
 
-                  <form action={reviewRequest} className="flex flex-col gap-4">
+                  <form action={demoReviewRequest} className="flex flex-col gap-4">
                     <input type="hidden" name="requestId" value={selected.id} />
+                    <input type="hidden" name="filter" value={filter} />
 
                     <div className="flex flex-col gap-3 border-t border-line pt-4">
                       <MonoLabel>FEEDBACK</MonoLabel>

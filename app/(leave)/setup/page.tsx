@@ -1,17 +1,16 @@
+import { DemoBanner } from "@/components/demo-banner";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui";
 import {
-  setHolidayRegion,
-  toggleApprovalRule,
-  updatePolicy,
-  updateWfhPolicy,
-} from "@/lib/actions";
+  demoSetHolidayRegion as setHolidayRegion,
+  demoToggleApprovalRule as toggleApprovalRule,
+  demoUpdatePolicy as updatePolicy,
+  demoUpdateWfhPolicy as updateWfhPolicy,
+} from "@/lib/demo-actions";
 import { formatDayMonth, formatWeekdayShort, isWeekend } from "@/lib/date";
 import { holidayYearGrid, holidaysForRegion } from "@/lib/domain";
-import { REGIONS } from "@/lib/seed";
-import { requireAdmin } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { REGIONS, seedDb } from "@/lib/seed";
 
 const HOLIDAY_YEAR = 2026;
 
@@ -21,11 +20,19 @@ const numberFieldClass =
 const fieldLabelClass =
   "flex flex-col gap-1.5 font-mono text-[11px] tracking-[0.06em] text-muted";
 
-export default async function SetupPage() {
-  await requireAdmin();
-
-  const db = await readDb();
-  const region = db.holidayRegion;
+export default async function SetupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ region?: string; demo?: string }>;
+}) {
+  const params = await searchParams;
+  const db = seedDb();
+  // The region select has nowhere to persist to, so it round-trips through the
+  // URL instead — the calendar below really does switch.
+  const region =
+    params.region && REGIONS.includes(params.region)
+      ? params.region
+      : db.holidayRegion;
   const holidays = holidaysForRegion(db, region);
   const totalHolidayDays = holidays.reduce((n, h) => n + h.days, 0);
   const months = holidayYearGrid(holidays, HOLIDAY_YEAR);
@@ -37,6 +44,8 @@ export default async function SetupPage() {
         subtitle="Policy the whole agency runs on."
         meta="ADMIN VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="flex max-w-[940px] flex-col gap-5">
         {db.policies.map((policy, index) => (

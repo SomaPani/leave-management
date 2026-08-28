@@ -487,7 +487,7 @@ async function assertMigrated(client: PoolClient): Promise<void> {
   if (!rows[0]!.present) {
     throw new Error(
       "The leave-management tables were removed from this database; only the " +
-        "organization backbone (/signin) remains. See Docs/2026-08-27-multi-tenant-org-rbac-implementation-notes.md.",
+        "organization backbone (/login) remains. See Docs/2026-08-27-multi-tenant-org-rbac-implementation-notes.md.",
     );
   }
 }

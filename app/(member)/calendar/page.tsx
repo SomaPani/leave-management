@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DemoBanner } from "@/components/demo-banner";
 import { PageHeader } from "@/components/page-header";
 import { Card, MonoLabel } from "@/components/ui";
 import { MONTH_NAMES, TODAY, formatDayMonth, shiftMonth } from "@/lib/date";
@@ -9,8 +10,7 @@ import {
   holidaysForRegion,
   viewingRegion,
 } from "@/lib/domain";
-import { requireMember } from "@/lib/session";
-import { readDb } from "@/lib/store";
+import { demoDb, demoMember } from "@/lib/demo-data";
 import { ATTENDANCE_ORDER, ATTENDANCE_STYLE } from "@/lib/ui";
 
 const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -23,10 +23,11 @@ const [DEFAULT_YEAR, DEFAULT_MONTH] = [
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ y?: string; m?: string }>;
+  searchParams: Promise<{ y?: string; m?: string; demo?: string }>;
 }) {
-  const user = await requireMember();
   const params = await searchParams;
+  const db = demoDb();
+  const user = demoMember(db);
 
   const parsedYear = Number.parseInt(params.y ?? "", 10);
   const parsedMonth = Number.parseInt(params.m ?? "", 10);
@@ -36,7 +37,6 @@ export default async function CalendarPage({
       ? parsedMonth
       : DEFAULT_MONTH;
 
-  const db = await readDb();
   const cells = attendanceMonth(db, user.id, year, month);
   const stats = attendanceStats(db, user.id, year, month);
 
@@ -63,6 +63,8 @@ export default async function CalendarPage({
         subtitle="Every day since you joined the month."
         meta="MEMBER VIEW"
       />
+
+      <DemoBanner action={params.demo} />
 
       <div className="grid max-w-[940px] items-start gap-6 lg:grid-cols-2">
         <Card className="flex flex-col gap-4 px-5.5 py-5">
