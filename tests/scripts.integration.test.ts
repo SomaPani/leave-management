@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { Role } from "@/generated/prisma/enums";
+import { EmploymentStatus, Role, WorkMode } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -153,5 +153,170 @@ describe("seed", { timeout: 120_000 }, () => {
     });
     // Only the one the CLI test made, never one from the seed.
     expect(superadmins).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * The Team half of the seed.
+ *
+ * Every case names its own organization, because the seed accumulates: regions
+ * upsert into whichever organization the run is pointed at, so sharing one
+ * would make the assertions depend on test order.
+ *
+ * `STACX_MEMBER_*` is blanked explicitly wherever a run should not touch a
+ * member. It cannot be left to chance: tests/setup.ts loads .env into the
+ * vitest process and `run` forwards `process.env` to the subprocess, so a
+ * developer's real member configuration is inherited unless it is overridden.
+ */
+describe("seed: regions and the sample member", { timeout: 120_000 }, () => {
+  const NO_MEMBER = {
+    STACX_MEMBER_NAME: BLANK,
+    STACX_MEMBER_EMAIL: BLANK,
+    STACX_MEMBER_PASSWORD: BLANK,
+  };
+
+  /** A seed run against its own organization. */
+  function seedInto(label: string, env: Record<string, string> = {}) {
+    const orgName = `${RUN}-${label}`;
+    const result = seed({
+      STACX_ORG_NAME: orgName,
+      STACX_ADMIN_NAME: `${label} Admin`,
+      STACX_ADMIN_EMAIL: `${RUN}-${label}-admin@example.test`,
+      STACX_ADMIN_PASSWORD: "a-long-enough-password",
+      ...NO_MEMBER,
+      ...env,
+    });
+    return { orgName, adminEmail: `${RUN}-${label}-admin@example.test`, ...result };
+  }
+
+  const regionsOf = (orgName: string) =>
+    prisma.region.findMany({
+      where: { organization: { name: orgName } },
+      select: { name: true },
+      orderBy: { name: "asc" },
+    });
+
+  it("defaults to Chennai and Delhi when STACX_REGIONS is unset", async () => {
+    const { orgName, status } = seedInto("rdefault", { STACX_REGIONS: BLANK });
+    expect(status).toBe(0);
+    expect((await regionsOf(orgName)).map((r) => r.name)).toEqual(["Chennai", "Delhi"]);
+  });
+
+  it("honours STACX_REGIONS, trimming and de-duplicating", async () => {
+    const { orgName, status } = seedInto("rcustom", {
+      STACX_REGIONS: " South , North ,South",
+    });
+    expect(status).toBe(0);
+    expect((await regionsOf(orgName)).map((r) => r.name)).toEqual(["North", "South"]);
+  });
+
+  it("is re-runnable without duplicating regions", async () => {
+    const first = seedInto("rrepeat", { STACX_REGIONS: "Chennai,Delhi" });
+    expect(first.status).toBe(0);
+    expect(seedInto("rrepeat", { STACX_REGIONS: "Chennai,Delhi" }).status).toBe(0);
+
+    expect(await prisma.region.count({ where: { organization: { name: first.orgName } } })).toBe(2);
+  });
+
+  it("skips the member when STACX_MEMBER_* is unset", async () => {
+    const { orgName, stdout, status } = seedInto("mskip");
+    expect(status).toBe(0);
+    expect(stdout).toContain("Member: skipped");
+
+    const members = await prisma.user.count({
+      where: { role: Role.MEMBER, organization: { name: orgName } },
+    });
+    expect(members).toBe(0);
+  });
+
+  it("creates the member with a profile, in the first region, reporting to the admin", async () => {
+    const email = `${RUN}-member@example.test`;
+    const { orgName, adminEmail, status } = seedInto("mmake", {
+      STACX_REGIONS: "Chennai,Delhi",
+      STACX_MEMBER_NAME: "Test Member",
+      STACX_MEMBER_EMAIL: email,
+      STACX_MEMBER_PASSWORD: "a-long-enough-password",
+    });
+    expect(status).toBe(0);
+
+    const member = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        role: true,
+        status: true,
+        title: true,
+        empId: true,
+        workMode: true,
+        joinedOn: true,
+        passwordHash: true,
+        organization: { select: { name: true } },
+        region: { select: { name: true } },
+        manager: { select: { email: true } },
+      },
+    });
+
+    expect(member).toMatchObject({
+      role: Role.MEMBER,
+      status: EmploymentStatus.ACTIVE,
+      title: "Copywriter",
+      empId: "STX-0001",
+      workMode: WorkMode.WFO,
+      organization: { name: orgName },
+      region: { name: "Chennai" },
+      manager: { email: adminEmail },
+    });
+    expect(member?.joinedOn).not.toBeNull();
+    expect(member?.passwordHash.startsWith("$2")).toBe(true);
+  });
+
+  it("fails fast when the member password is too short", () => {
+    const result = seedInto("mshort", {
+      STACX_MEMBER_EMAIL: `${RUN}-short@example.test`,
+      STACX_MEMBER_PASSWORD: "short",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("STACX_MEMBER_PASSWORD");
+  });
+
+  /**
+   * The case this guard exists for: the member email is pinned in .env while
+   * the organization name is not, so a run aimed elsewhere would otherwise
+   * move a real member into whichever organization it just built.
+   */
+  it("refuses to move a member that belongs to another organization", async () => {
+    const email = `${RUN}-settled@example.test`;
+    const home = seedInto("mhome", {
+      STACX_MEMBER_EMAIL: email,
+      STACX_MEMBER_PASSWORD: "a-long-enough-password",
+    });
+    expect(home.status).toBe(0);
+
+    const elsewhere = seedInto("melsewhere", {
+      STACX_MEMBER_EMAIL: email,
+      STACX_MEMBER_PASSWORD: "a-long-enough-password",
+    });
+    expect(elsewhere.status).toBe(0);
+    expect(elsewhere.stdout).toContain("belongs to another organization");
+
+    const settled = await prisma.user.findUnique({
+      where: { email },
+      select: { organization: { select: { name: true } } },
+    });
+    expect(settled?.organization?.name).toBe(home.orgName);
+  });
+
+  it("refuses to convert an account that holds another role", async () => {
+    const { adminEmail, stdout, status } = seedInto("mrole", {
+      STACX_MEMBER_EMAIL: `${RUN}-mrole-admin@example.test`,
+      STACX_MEMBER_PASSWORD: "a-long-enough-password",
+    });
+    expect(status).toBe(0);
+    expect(stdout).toContain("already exists as ADMIN");
+
+    const stillAdmin = await prisma.user.findUnique({
+      where: { email: adminEmail },
+      select: { role: true },
+    });
+    expect(stillAdmin?.role).toBe(Role.ADMIN);
   });
 });

@@ -60,6 +60,11 @@ function del(): Request {
   return new Request("http://localhost/api", { method: "DELETE" });
 }
 
+/** A GET, optionally carrying the query string a handler reads filters from. */
+function get(query = ""): Request {
+  return new Request(`http://localhost/api${query ? `?${query}` : ""}`);
+}
+
 /** Route handlers receive params as a promise in Next 16. */
 function ctx(id: string) {
   return { params: Promise.resolve({ id }) };
@@ -405,7 +410,7 @@ describe("GET /api/members", () => {
 
   it("shows an admin only their own organization's members", async () => {
     actingAs(adminA);
-    const response = await members.GET();
+    const response = await members.GET(get());
     expect(response.status).toBe(200);
 
     const list = (await response.json()) as { email: string; organizationId: string }[];
@@ -416,14 +421,14 @@ describe("GET /api/members", () => {
 
   it("shows the other admin their own organization instead", async () => {
     actingAs(adminB);
-    const list = (await (await members.GET()).json()) as { email: string }[];
+    const list = (await (await members.GET(get())).json()) as { email: string }[];
     expect(list.map((member) => member.email)).toContain(email("scoped-b"));
     expect(list.map((member) => member.email)).not.toContain(email("scoped-a"));
   });
 
   it("shows a superadmin members from every organization", async () => {
     actingAs(superadmin);
-    const list = (await (await members.GET()).json()) as { email: string }[];
+    const list = (await (await members.GET(get())).json()) as { email: string }[];
     const emails = list.map((member) => member.email);
     expect(emails).toContain(email("scoped-a"));
     expect(emails).toContain(email("scoped-b"));
@@ -431,7 +436,7 @@ describe("GET /api/members", () => {
 
   it("rejects a member with 403", async () => {
     actingAs(memberA);
-    expect((await members.GET()).status).toBe(403);
+    expect((await members.GET(get())).status).toBe(403);
   });
 });
 

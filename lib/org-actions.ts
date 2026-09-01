@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
 import { currentActor, signIn, signOut } from "@/lib/auth";
-import { HttpError, requireActor } from "@/lib/rbac";
+import { backWithError, field } from "@/lib/form";
+import { requireActor } from "@/lib/rbac";
 import { createAdmin, createMember, createOrganization } from "@/lib/services";
 
 /**
@@ -17,20 +18,10 @@ import { createAdmin, createMember, createOrganization } from "@/lib/services";
  * which these share with the API routes.
  *
  * Failures come back as a `?error=` message on the page instead of an
- * exception, so the unstyled forms stay usable without client-side state.
+ * exception, so the unstyled forms stay usable without client-side state —
+ * `field` and `backWithError` are shared with lib/team-actions.ts through
+ * lib/form.ts.
  */
-
-function field(form: FormData, key: string): string {
-  const value = form.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-/** Sends the caller back to `path` with a readable message attached. */
-function backWithError(path: string, error: unknown): never {
-  const message =
-    error instanceof HttpError ? error.message : "Something went wrong.";
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
-}
 
 export async function signInAction(form: FormData): Promise<void> {
   const email = field(form, "email");

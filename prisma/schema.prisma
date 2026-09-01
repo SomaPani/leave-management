@@ -19,6 +19,20 @@ enum Role {
   MEMBER
 }
 
+/// Where a team member works from. Absent until an admin sets it.
+enum WorkMode {
+  WFO
+  WFH
+}
+
+/// Whether a member is still on the team. Removal is a status change, not a
+/// delete: leave and attendance rows will reference these users, and deleting
+/// a person would take their history with them.
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model Organization {
   id String @id @default(cuid())
 
@@ -26,6 +40,23 @@ model Organization {
   name      String   @unique
   createdAt DateTime @default(now())
   users     User[]
+  regions   Region[]
+}
+
+/// An office/location a team is grouped by on the Team screen.
+///
+/// Scoped to one organization rather than global, so two organizations can each
+/// have a "Chennai" without sharing a row.
+model Region {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users          User[]
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
 }
 
 model User {
@@ -45,5 +76,40 @@ model User {
   createdById String?
   createdAt   DateTime @default(now())
 
+  // --- Team profile ---------------------------------------------------------
+  //
+  // Every field below is optional: they describe a MEMBER on the Team screen,
+  // and a SUPERADMIN legitimately has none of them. `status` is the exception —
+  // it always has an answer, so it defaults rather than being nullable.
+  //
+  // `initials` is deliberately absent: it is derived from `name` by
+  // `initialsFor()` in lib/domain.ts, and a stored copy would drift on rename.
+
+  title    String?
+  empId    String?
+  joinedOn DateTime?
+  workMode WorkMode?
+  status   EmploymentStatus @default(ACTIVE)
+
+  regionId String?
+  region   Region? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+
+  // The reporting line, as a reference rather than the fixture's name string,
+  // so renaming a manager cannot orphan it. Validated to be inside the same
+  // organization in lib/services.ts — the database cannot express that.
+  managerId String?
+  manager   User?   @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports   User[]  @relation("UserManager")
+
+  phone          String?
+  personalEmail  String?
+  address        String?
+  emergencyName  String?
+  emergencyPhone String?
+
+  // Employee ids are unique per organization, not globally. Postgres treats
+  // NULLs as distinct, so members without one do not collide.
+  @@unique([organizationId, empId])
   @@index([organizationId])
+  @@index([regionId])
 }

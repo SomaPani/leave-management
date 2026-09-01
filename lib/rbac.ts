@@ -80,11 +80,38 @@ export function canDeleteMember(actor: Actor, memberOrganizationId: string | nul
   return canUpdateMember(actor, memberOrganizationId);
 }
 
+/**
+ * Regions — the groupings the Team screen lists people under — are created,
+ * renamed and removed by the Admin of the organization they belong to.
+ *
+ * Covers all three verbs deliberately: a region has no lifecycle in which
+ * creating it and renaming it answer to different people. Pass the *stored*
+ * `Region.organizationId` when updating or deleting one, never an id from the
+ * request — that is what stops an admin reaching into another organization's
+ * regions, the same way `canUpdateMember` reads the member's own column.
+ *
+ * Not widened to SuperAdmin, matching `canCreateMember`: a SuperAdmin creates
+ * organizations and admins, and what lives inside an organization is its
+ * admin's to manage. `canListRegions` below is the read-side exception.
+ */
+export function canManageRegions(actor: Actor, regionOrganizationId: string): boolean {
+  return actor.role === Role.ADMIN && actor.organizationId === regionOrganizationId;
+}
+
 export function canListOrganizations(actor: Actor): boolean {
   return actor.role === Role.SUPERADMIN;
 }
 
 export function canListMembers(actor: Actor): boolean {
+  return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
+}
+
+/**
+ * Reading regions follows `canListMembers`, not `canManageRegions`: a
+ * SuperAdmin sees every organization, so they may read the regions inside one
+ * even though they cannot change them. Scope the query with `visibleOrgId`.
+ */
+export function canListRegions(actor: Actor): boolean {
   return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
 }
 

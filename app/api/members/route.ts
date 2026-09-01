@@ -6,6 +6,7 @@ import {
   requiredString,
 } from "@/lib/api";
 import { currentActor } from "@/lib/auth";
+import { memberProfileFrom, statusFilterFrom } from "@/lib/member-input";
 import { HttpError, requireActor } from "@/lib/rbac";
 import { createMember, listMembers } from "@/lib/services";
 
@@ -22,6 +23,8 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const member = await createMember(actor, {
+      // The Team profile: every field optional, absent ones left unset.
+      ...memberProfileFrom(body),
       name: requiredString(body, "name"),
       email: requiredEmail(body, "email"),
       // Read only so a cross-org attempt is rejected outright rather than
@@ -36,10 +39,26 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-export async function GET(): Promise<Response> {
+/**
+ * The roster.
+ *
+ * `?status=ACTIVE|INACTIVE|ALL` and `?region=<id>` narrow it; with neither, the
+ * service returns the active members of whatever organizations the caller can
+ * see. `region` is not validated against the caller's organization because it
+ * cannot leak anything — the org scope is applied regardless, so a foreign
+ * region id simply matches nobody.
+ */
+export async function GET(request: Request): Promise<Response> {
   try {
     const actor = requireActor(await currentActor());
-    return Response.json(await listMembers(actor));
+    const params = new URL(request.url).searchParams;
+
+    return Response.json(
+      await listMembers(actor, {
+        status: statusFilterFrom(params),
+        regionId: params.get("region")?.trim() || undefined,
+      }),
+    );
   } catch (error) {
     return errorResponse(error);
   }

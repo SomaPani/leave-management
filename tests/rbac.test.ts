@@ -13,6 +13,8 @@ import {
   canDeleteOrganization,
   canListMembers,
   canListOrganizations,
+  canListRegions,
+  canManageRegions,
   canUpdateAdmin,
   canUpdateMember,
   canUpdateOrganization,
@@ -74,6 +76,25 @@ describe("who can create a member", () => {
   });
 });
 
+describe("who can manage regions", () => {
+  it("allows an admin inside their own organization", () => {
+    expect(canManageRegions(adminA, ORG_A)).toBe(true);
+  });
+
+  it("denies an admin in someone else's organization", () => {
+    expect(canManageRegions(adminA, ORG_B)).toBe(false);
+    expect(canManageRegions(adminB, ORG_A)).toBe(false);
+  });
+
+  it("denies members", () => {
+    expect(canManageRegions(memberA, ORG_A)).toBe(false);
+  });
+
+  it("denies a superadmin — what is inside an org is its admin's to manage", () => {
+    expect(canManageRegions(superadmin, ORG_A)).toBe(false);
+  });
+});
+
 describe("list scoping", () => {
   it("lets only a superadmin list organizations", () => {
     expect(canListOrganizations(superadmin)).toBe(true);
@@ -85,6 +106,13 @@ describe("list scoping", () => {
     expect(canListMembers(superadmin)).toBe(true);
     expect(canListMembers(adminA)).toBe(true);
     expect(canListMembers(memberA)).toBe(false);
+  });
+
+  it("lets a superadmin read regions they cannot manage", () => {
+    expect(canListRegions(superadmin)).toBe(true);
+    expect(canManageRegions(superadmin, ORG_A)).toBe(false);
+    expect(canListRegions(adminA)).toBe(true);
+    expect(canListRegions(memberA)).toBe(false);
   });
 
   it("scopes a superadmin to every organization and an admin to their own", () => {
