@@ -5,26 +5,20 @@ import { redirect } from "next/navigation";
 /**
  * Stand-ins for the leave-management server actions.
  *
- * The admin screens render `seedDb()` — an in-memory fixture, not a table — so
- * there is nowhere for a decision, a mark or a policy edit to go. Each action
- * below bounces back to the page it came from with `?demo=…`, which the page
- * turns into a banner saying the change was not saved. That is deliberately
- * more honest than a silent no-op, which reads as a broken button.
+ * The screens still on `seedDb()` — an in-memory fixture, not a table — have
+ * nowhere for a decision or a policy edit to go. Each action below bounces back
+ * to the page it came from with `?demo=…`, which the page turns into a banner
+ * saying the change was not saved. That is deliberately more honest than a
+ * silent no-op, which reads as a broken button.
  *
- * The real versions are still in lib/actions.ts. Swapping back to them means
- * giving these screens a data source first — see the note at the top of
- * app/(leave)/approvals/page.tsx.
+ * Attendance has left: it is backed by `orgapp.Attendance` and writes through
+ * lib/attendance-actions.ts. Team left before it. The rest go the same way —
+ * each needs a real data source first, not a different action.
  */
 
 function text(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value : "";
-}
-
-/** Preserves the date the attendance grid was showing. */
-function attendanceHref(form: FormData, marker: string): string {
-  const date = text(form, "date");
-  return `/attendance?${date ? `date=${date}&` : ""}demo=${marker}`;
 }
 
 /* ------------------------------------------------------------ approvals -- */
@@ -35,16 +29,6 @@ export async function demoReviewRequest(form: FormData): Promise<void> {
   const intent = text(form, "intent") || "comment";
 
   redirect(`/approvals?filter=${filter}&r=${requestId}&demo=${intent}`);
-}
-
-/* ----------------------------------------------------------- attendance -- */
-
-export async function demoMarkAttendance(form: FormData): Promise<void> {
-  redirect(attendanceHref(form, "mark"));
-}
-
-export async function demoMarkEveryonePresent(form: FormData): Promise<void> {
-  redirect(attendanceHref(form, "present"));
 }
 
 /* ----------------------------------------------------------------- team -- */

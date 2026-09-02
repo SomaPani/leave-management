@@ -11,7 +11,7 @@ import {
   viewingRegion,
 } from "@/lib/domain";
 import { demoDb, demoMember } from "@/lib/demo-data";
-import { ATTENDANCE_ORDER, ATTENDANCE_STYLE } from "@/lib/ui";
+import { ATTENDANCE_ORDER, LEGACY_ATTENDANCE_STYLE } from "@/lib/ui";
 
 const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -106,12 +106,12 @@ export default async function CalendarPage({
               }
 
               const primary = cell.codes[0];
-              const style = primary ? ATTENDANCE_STYLE[primary] : null;
+              const style = primary ? LEGACY_ATTENDANCE_STYLE[primary] : null;
 
               return (
                 <span
                   key={cell.key}
-                  title={cell.codes.map((c) => ATTENDANCE_STYLE[c].label).join(" + ")}
+                  title={cell.codes.map((c) => LEGACY_ATTENDANCE_STYLE[c].label).join(" + ")}
                   className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-px overflow-hidden rounded-lg border ${
                     cell.weekend
                       ? "border-line bg-subtle text-[#cbd5e1]"
@@ -129,7 +129,7 @@ export default async function CalendarPage({
                     {cell.weekend
                       ? ""
                       : cell.codes.length
-                        ? cell.codes.map((c) => ATTENDANCE_STYLE[c].short).join("")
+                        ? cell.codes.map((c) => LEGACY_ATTENDANCE_STYLE[c].short).join("")
                         : "–"}
                   </span>
                 </span>
@@ -144,9 +144,9 @@ export default async function CalendarPage({
                 className="flex items-center gap-1.5 text-[12.5px] text-ink-2"
               >
                 <span
-                  className={`size-3 rounded-[3px] border ${ATTENDANCE_STYLE[code].swatch}`}
+                  className={`size-3 rounded-[3px] border ${LEGACY_ATTENDANCE_STYLE[code].swatch}`}
                 />
-                {ATTENDANCE_STYLE[code].label}
+                {LEGACY_ATTENDANCE_STYLE[code].label}
               </span>
             ))}
           </div>

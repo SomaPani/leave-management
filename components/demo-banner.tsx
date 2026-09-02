@@ -7,8 +7,6 @@ const MESSAGES: Record<string, string> = {
   approve: "the approval was not saved.",
   reject: "the rejection was not saved.",
   comment: "the comment was not saved.",
-  mark: "the attendance mark was not saved.",
-  present: "marking everyone present was not saved.",
   add: "the new team member was not saved.",
   policy: "the policy change was not saved.",
   wfh: "the work-from-home policy change was not saved.",

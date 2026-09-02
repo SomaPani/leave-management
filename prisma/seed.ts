@@ -1,6 +1,12 @@
 import "dotenv/config";
 
-import { Role, WorkMode } from "../generated/prisma/enums";
+import {
+  AttendanceModifier,
+  AttendanceStatus,
+  Role,
+  WorkMode,
+} from "../generated/prisma/enums";
+import { todayIso } from "../lib/attendance";
 import { hashPassword, MIN_PASSWORD_LENGTH } from "../lib/password";
 import { prisma } from "../lib/prisma";
 import type { Prisma } from "../generated/prisma/client";
@@ -122,6 +128,78 @@ async function upsertMember(
   });
 }
 
+/**
+ * A fortnight of attendance for the seeded organization, so a fresh database
+ * renders a populated grid rather than a column of "Not marked yet".
+ *
+ * Reads the roster rather than taking one, because the sample member is
+ * optional (`memberConfig`) — with none configured this writes nothing and says
+ * so. Weekdays only, ending today, with a rotating exception so the grid shows
+ * more than one state.
+ *
+ * Idempotent: `skipDuplicates` against the `[userId, date]` unique index means
+ * re-running the seed changes nothing. Deliberately outside the main
+ * transaction — it is demo colour, and failing it should not roll back the
+ * organization and its admin.
+ */
+async function seedAttendance(
+  organizationId: string,
+  adminId: string,
+): Promise<number> {
+  const members = await prisma.user.findMany({
+    where: { organizationId, role: Role.MEMBER },
+    select: { id: true },
+  });
+  if (members.length === 0) return 0;
+
+  const today = new Date(`${todayIso()}T00:00:00.000Z`);
+  const rows: Prisma.AttendanceCreateManyInput[] = [];
+
+  let weekdays = 0;
+  for (let back = 0; weekdays < 10 && back < 30; back++) {
+    const date = new Date(today);
+    date.setUTCDate(date.getUTCDate() - back);
+
+    const weekday = date.getUTCDay();
+    if (weekday === 0 || weekday === 6) continue;
+    weekdays++;
+
+    members.forEach((member, index) => {
+      const slot = (weekdays + index) % 7;
+
+      const status =
+        slot === 3
+          ? AttendanceStatus.WFH
+          : slot === 5
+            ? AttendanceStatus.ABSENT
+            : AttendanceStatus.PRESENT;
+
+      const modifier =
+        slot === 1
+          ? AttendanceModifier.HALF_DAY
+          : slot === 4
+            ? AttendanceModifier.SHORT_LEAVE
+            : null;
+
+      rows.push({
+        userId: member.id,
+        organizationId,
+        date,
+        status,
+        // The CHECK constraint: an absence carries no add-on.
+        modifier: status === AttendanceStatus.ABSENT ? null : modifier,
+        markedById: adminId,
+      });
+    });
+  }
+
+  const { count } = await prisma.attendance.createMany({
+    data: rows,
+    skipDuplicates: true,
+  });
+  return count;
+}
+
 async function main(): Promise<void> {
   const orgName = required("STACX_ORG_NAME");
   const adminName = required("STACX_ADMIN_NAME");
@@ -210,6 +288,8 @@ async function main(): Promise<void> {
     return { organization, admin, regions, memberResult };
   });
 
+  const attendanceRows = await seedAttendance(seeded.organization.id, seeded.admin.id);
+
   console.log(
     `Seeded organization "${seeded.organization.name}" (${seeded.organization.id}) with admin ${seeded.admin.email}`,
   );
@@ -224,6 +304,12 @@ async function main(): Promise<void> {
   } else {
     console.log(`Member: ${seeded.memberResult.email}`);
   }
+
+  console.log(
+    attendanceRows > 0
+      ? `Attendance: ${attendanceRows} rows across the last 10 weekdays.`
+      : "Attendance: skipped (no members in this organization).",
+  );
 }
 
 main()

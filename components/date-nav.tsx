@@ -12,11 +12,17 @@ export function DateNav({
   param = "date",
   className = "",
   id,
+  max,
 }: {
   value: string;
   param?: string;
   className?: string;
   id?: string;
+  /**
+   * Latest selectable day, `YYYY-MM-DD`. A convenience, not a guard — the
+   * server re-checks the date regardless.
+   */
+  max?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -28,6 +34,7 @@ export function DateNav({
       id={id}
       type="date"
       value={value}
+      max={max}
       disabled={pending}
       onChange={(event) => {
         const next = new URLSearchParams(searchParams);

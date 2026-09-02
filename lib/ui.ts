@@ -1,4 +1,5 @@
-import type { AttendanceCode, RequestStatus } from "@/lib/types";
+import type { AttendanceCode } from "@/lib/attendance";
+import type { AttendanceCode as LegacyAttendanceCode, RequestStatus } from "@/lib/types";
 
 /**
  * Presentation tokens for the two data-driven colour scales in the design.
@@ -15,8 +16,13 @@ export const STATUS_STYLE: Record<
   withdrawn: { label: "WITHDRAWN", className: "bg-[#efeeea] text-muted" },
 };
 
-export const ATTENDANCE_STYLE: Record<
-  AttendanceCode,
+/**
+ * The fixture screens' attendance palette, keyed by the lowercase codes in
+ * lib/types.ts. Deleted when those screens move to real data;
+ * `ATTENDANCE_STYLE` below is the one keyed by the database enums.
+ */
+export const LEGACY_ATTENDANCE_STYLE: Record<
+  LegacyAttendanceCode,
   { label: string; short: string; chip: string; border: string; swatch: string }
 > = {
   present: {
@@ -63,8 +69,59 @@ export const ATTENDANCE_STYLE: Record<
   },
 };
 
-/** Order used by the legend and the summary pills. */
-export const ATTENDANCE_ORDER: AttendanceCode[] = [
+/**
+ * The same palette keyed by the Prisma enums, for the screens on real data.
+ *
+ * No `label` key: `codeLabel` in lib/attendance.ts owns the wording, so a
+ * button and a pill cannot disagree about what to call a code.
+ *
+ * WFH deliberately shares Present's green — a day worked from home is still a
+ * day worked, and the design distinguishes them by label, not colour.
+ */
+export const ATTENDANCE_STYLE: Record<
+  AttendanceCode,
+  { short: string; chip: string; border: string; swatch: string }
+> = {
+  PRESENT: {
+    short: "P",
+    chip: "bg-[#dcfce7] text-[#16a34a]",
+    border: "border-[#16a34a]",
+    swatch: "bg-[#dcfce7] border-[#16a34a]",
+  },
+  WFH: {
+    short: "W",
+    chip: "bg-[#dcfce7] text-[#16a34a]",
+    border: "border-[#16a34a]",
+    swatch: "bg-[#dcfce7] border-[#16a34a]",
+  },
+  HALF_DAY: {
+    short: "H",
+    chip: "bg-[#fef3c7] text-[#d97706]",
+    border: "border-[#d97706]",
+    swatch: "bg-[#fef3c7] border-[#d97706]",
+  },
+  ABSENT: {
+    short: "A",
+    chip: "bg-[#fee2e2] text-[#dc2626]",
+    border: "border-[#dc2626]",
+    swatch: "bg-[#fee2e2] border-[#dc2626]",
+  },
+  LEAVE: {
+    short: "L",
+    chip: "bg-[#e0e7ff] text-[#4338ca]",
+    border: "border-[#4338ca]",
+    swatch: "bg-[#e0e7ff] border-[#4338ca]",
+  },
+  SHORT_LEAVE: {
+    short: "S",
+    chip: "bg-[#fce7f3] text-[#be185d]",
+    border: "border-[#be185d]",
+    swatch: "bg-[#fce7f3] border-[#be185d]",
+  },
+};
+
+/** Order used by the fixture screens' legend and summary pills. */
+export const ATTENDANCE_ORDER: LegacyAttendanceCode[] = [
   "present",
   "half",
   "wfh",
@@ -74,14 +131,17 @@ export const ATTENDANCE_ORDER: AttendanceCode[] = [
 ];
 
 /** The "status today" pill on the team table. */
-export function todayPill(codes: AttendanceCode[]): {
+export function todayPill(codes: LegacyAttendanceCode[]): {
   label: string;
   className: string;
 } {
   for (const code of ["leave", "wfh", "half", "absent"] as const) {
     if (codes.includes(code)) {
-      return { label: ATTENDANCE_STYLE[code].label, className: ATTENDANCE_STYLE[code].chip };
+      return {
+        label: LEGACY_ATTENDANCE_STYLE[code].label,
+        className: LEGACY_ATTENDANCE_STYLE[code].chip,
+      };
     }
   }
-  return { label: "Working", className: ATTENDANCE_STYLE.present.chip };
+  return { label: "Working", className: LEGACY_ATTENDANCE_STYLE.present.chip };
 }
