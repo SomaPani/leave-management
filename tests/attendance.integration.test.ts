@@ -300,3 +300,95 @@ describe("toggleAttendanceCode", () => {
     expect(await on("ABSENT")).toBeNull();
   });
 });
+
+const { markEveryonePresent } = await import("@/lib/attendance-service");
+
+describe("markEveryonePresent", () => {
+  let secondId: string;
+
+  it("fills only the people with no mark, leaving the rest alone", async () => {
+    const other = await prisma.user.create({
+      data: {
+        name: "Run Second",
+        email: email("second"),
+        passwordHash: "x",
+        role: Role.MEMBER,
+        organizationId: orgId,
+      },
+    });
+    secondId = other.id;
+
+    // memberId already carries a deliberate absence on this day.
+    await setAttendance(adminActor(), {
+      userId: memberId,
+      date: "2026-08-27",
+      status: "ABSENT",
+      modifier: null,
+    });
+
+    const result = await markEveryonePresent(adminActor(), "2026-08-27");
+
+    expect(result).toEqual({ filled: 1, skipped: 1 });
+
+    const kept = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: memberId, date: new Date("2026-08-27") } },
+    });
+    expect(kept?.status).toBe("ABSENT");
+
+    const added = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: other.id, date: new Date("2026-08-27") } },
+    });
+    expect(added?.status).toBe("PRESENT");
+    expect(added?.modifier).toBeNull();
+  });
+
+  it("is a no-op the second time", async () => {
+    const result = await markEveryonePresent(adminActor(), "2026-08-27");
+    expect(result).toEqual({ filled: 0, skipped: 2 });
+  });
+
+  it("logs an event for the row it created and none for the one it skipped", async () => {
+    // The absence on memberId was written by this describe's own setup, so it
+    // has a creation event too — filtering on `fromStatus: null` alone would
+    // catch both. What the bulk fill is responsible for is the PRESENT one.
+    const filled = await prisma.attendanceEvent.findMany({
+      where: {
+        organizationId: orgId,
+        date: new Date("2026-08-27"),
+        toStatus: "PRESENT",
+      },
+    });
+    expect(filled).toHaveLength(1);
+    expect(filled[0]).toMatchObject({ userId: secondId, fromStatus: null });
+
+    // The person who was skipped kept exactly the one event their own mark
+    // wrote — the second run of markEveryonePresent added nothing.
+    const skipped = await prisma.attendanceEvent.findMany({
+      where: { userId: memberId, date: new Date("2026-08-27") },
+    });
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]).toMatchObject({ toStatus: "ABSENT" });
+  });
+
+  it("refuses a future date", async () => {
+    await expect(
+      markEveryonePresent(adminActor(), "2099-01-01"),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a member and a superadmin", async () => {
+    await expect(
+      markEveryonePresent(
+        { id: memberId, role: Role.MEMBER, organizationId: orgId },
+        "2026-08-27",
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+
+    await expect(
+      markEveryonePresent(
+        { id: "s1", role: Role.SUPERADMIN, organizationId: null },
+        "2026-08-27",
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});

@@ -334,3 +334,74 @@ export async function toggleAttendanceCode(
     modifier: next.modifier,
   });
 }
+
+/**
+ * Fill the gaps on a day with a plain Present.
+ *
+ * Only the people with no row are touched: a half day, an absence or a day of
+ * leave already recorded is deliberate work, and a bulk button must not erase
+ * it. That also makes the action idempotent — clicking it twice changes
+ * nothing the second time.
+ *
+ * Not `createMany({ skipDuplicates: true })`, which would be one statement but
+ * would not say *which* rows it created, and every created row needs an audit
+ * event. The gap is computed first instead, inside the transaction.
+ */
+export async function markEveryonePresent(
+  actor: Actor,
+  date: string,
+): Promise<{ filled: number; skipped: number }> {
+  assertMarkable(date);
+
+  if (actor.role !== Role.ADMIN || !actor.organizationId) {
+    throw new HttpError(403, "Only an organization admin can mark attendance.");
+  }
+  const organizationId = actor.organizationId;
+  const day = toDbDate(date);
+
+  return prisma.$transaction(async (tx) => {
+    const members = await tx.user.findMany({
+      where: {
+        organizationId,
+        role: Role.MEMBER,
+        status: EmploymentStatus.ACTIVE,
+      },
+      select: { id: true },
+    });
+
+    const marked = await tx.attendance.findMany({
+      where: { organizationId, date: day },
+      select: { userId: true },
+    });
+    const already = new Set(marked.map((m) => m.userId));
+    const gaps = members.filter((m) => !already.has(m.id));
+
+    if (gaps.length > 0) {
+      await tx.attendance.createMany({
+        data: gaps.map((m) => ({
+          userId: m.id,
+          organizationId,
+          date: day,
+          status: AttendanceStatus.PRESENT,
+          modifier: null,
+          markedById: actor.id,
+        })),
+      });
+
+      await tx.attendanceEvent.createMany({
+        data: gaps.map((m) => ({
+          organizationId,
+          userId: m.id,
+          date: day,
+          fromStatus: null,
+          fromModifier: null,
+          toStatus: AttendanceStatus.PRESENT,
+          toModifier: null,
+          actorId: actor.id,
+        })),
+      });
+    }
+
+    return { filled: gaps.length, skipped: members.length - gaps.length };
+  });
+}
