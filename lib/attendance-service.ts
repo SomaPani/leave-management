@@ -5,9 +5,23 @@ import {
   Role,
   WorkMode,
 } from "@/generated/prisma/enums";
-import { fromDbDate, toDbDate, type AttendanceState } from "@/lib/attendance";
+import {
+  assertMarkable,
+  fromDbDate,
+  isWorkingStatus,
+  toDbDate,
+  toggle,
+  type AttendanceCode,
+  type AttendanceState,
+} from "@/lib/attendance";
 import { prisma } from "@/lib/prisma";
-import { type Actor, HttpError, canListAttendance, visibleOrgId } from "@/lib/rbac";
+import {
+  type Actor,
+  HttpError,
+  canListAttendance,
+  canMarkAttendance,
+  visibleOrgId,
+} from "@/lib/rbac";
 
 /**
  * Everything that reads or writes the attendance tables.
@@ -136,4 +150,187 @@ export async function listRangeAttendance(
     status: row.status,
     modifier: row.modifier,
   }));
+}
+
+/* --------------------------------------------------------------- writing -- */
+
+/**
+ * The member an admin may write against, or a 403.
+ *
+ * "Not found" and "belongs to another organization" answer identically, and
+ * with a 403 rather than a 404, so this cannot be used to discover which user
+ * ids exist elsewhere — the same rule `assertRegionInOrg` follows in
+ * lib/services.ts.
+ */
+async function assertMarkableMember(
+  actor: Actor,
+  userId: string,
+): Promise<{ organizationId: string }> {
+  const member = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { organizationId: true, role: true, status: true },
+  });
+
+  if (!member || !canMarkAttendance(actor, member.organizationId)) {
+    throw new HttpError(403, "You cannot mark attendance for that person.");
+  }
+  if (member.role !== Role.MEMBER) {
+    throw new HttpError(400, "Attendance is only recorded for team members.");
+  }
+  if (member.status !== EmploymentStatus.ACTIVE) {
+    throw new HttpError(400, "That person is no longer on the team.");
+  }
+
+  // Non-null by canMarkAttendance: it only passes for an ADMIN, and an ADMIN
+  // always carries an organization.
+  return { organizationId: member.organizationId! };
+}
+
+/** The combination rule, checked before the database has to. */
+function assertValidState(state: AttendanceState): void {
+  if (state.modifier && !isWorkingStatus(state.status)) {
+    throw new HttpError(
+      400,
+      "Half day and Short leave only apply to a day worked — Present or WFH.",
+    );
+  }
+}
+
+/**
+ * Write one person's day, and log the change.
+ *
+ * The read, the write and the audit row share one transaction so a concurrent
+ * edit cannot interleave between reading the previous value and recording it.
+ */
+export async function setAttendance(
+  actor: Actor,
+  input: {
+    userId: string;
+    date: string;
+    status: AttendanceStatus;
+    modifier: AttendanceModifier | null;
+  },
+): Promise<AttendanceState> {
+  assertMarkable(input.date);
+  assertValidState({ status: input.status, modifier: input.modifier });
+  const { organizationId } = await assertMarkableMember(actor, input.userId);
+
+  const date = toDbDate(input.date);
+
+  return prisma.$transaction(async (tx) => {
+    const previous = await tx.attendance.findUnique({
+      where: { userId_date: { userId: input.userId, date } },
+      select: { status: true, modifier: true },
+    });
+
+    const row = await tx.attendance.upsert({
+      where: { userId_date: { userId: input.userId, date } },
+      create: {
+        userId: input.userId,
+        organizationId,
+        date,
+        status: input.status,
+        modifier: input.modifier,
+        markedById: actor.id,
+      },
+      update: {
+        status: input.status,
+        modifier: input.modifier,
+        markedById: actor.id,
+      },
+      select: { status: true, modifier: true },
+    });
+
+    await tx.attendanceEvent.create({
+      data: {
+        organizationId,
+        userId: input.userId,
+        date,
+        fromStatus: previous?.status ?? null,
+        fromModifier: previous?.modifier ?? null,
+        toStatus: row.status,
+        toModifier: row.modifier,
+        actorId: actor.id,
+      },
+    });
+
+    return { status: row.status, modifier: row.modifier };
+  });
+}
+
+/**
+ * Unmark a day.
+ *
+ * A no-op on a day that has no row: the caller asked for it to be unmarked and
+ * it is, so raising a 404 would only make the grid's toggle harder to use.
+ * Nothing is logged in that case either — there was no change.
+ */
+export async function clearAttendance(
+  actor: Actor,
+  input: { userId: string; date: string },
+): Promise<void> {
+  assertMarkable(input.date);
+  const { organizationId } = await assertMarkableMember(actor, input.userId);
+
+  const date = toDbDate(input.date);
+
+  await prisma.$transaction(async (tx) => {
+    const previous = await tx.attendance.findUnique({
+      where: { userId_date: { userId: input.userId, date } },
+      select: { status: true, modifier: true },
+    });
+    if (!previous) return;
+
+    await tx.attendance.delete({
+      where: { userId_date: { userId: input.userId, date } },
+    });
+
+    await tx.attendanceEvent.create({
+      data: {
+        organizationId,
+        userId: input.userId,
+        date,
+        fromStatus: previous.status,
+        fromModifier: previous.modifier,
+        toStatus: null,
+        toModifier: null,
+        actorId: actor.id,
+      },
+    });
+  });
+}
+
+/**
+ * One button press on the grid.
+ *
+ * The next state is computed by `toggle` in lib/attendance.ts — the same pure
+ * function the unit tests pin — so the screen's behaviour and the stored rules
+ * cannot drift apart. Returns the new state, or `null` when the press cleared
+ * the day.
+ */
+export async function toggleAttendanceCode(
+  actor: Actor,
+  input: { userId: string; date: string; code: AttendanceCode },
+): Promise<AttendanceState | null> {
+  assertMarkable(input.date);
+  await assertMarkableMember(actor, input.userId);
+
+  const current = await prisma.attendance.findUnique({
+    where: { userId_date: { userId: input.userId, date: toDbDate(input.date) } },
+    select: { status: true, modifier: true },
+  });
+
+  const next = toggle(current ?? null, input.code);
+
+  if (!next) {
+    await clearAttendance(actor, { userId: input.userId, date: input.date });
+    return null;
+  }
+
+  return setAttendance(actor, {
+    userId: input.userId,
+    date: input.date,
+    status: next.status,
+    modifier: next.modifier,
+  });
 }

@@ -154,3 +154,149 @@ describe("listRangeAttendance", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 });
+
+const { setAttendance, clearAttendance, toggleAttendanceCode } = await import(
+  "@/lib/attendance-service"
+);
+
+describe("setAttendance", () => {
+  it("creates and then overwrites the same day", async () => {
+    const first = await setAttendance(adminActor(), {
+      userId: memberId,
+      date: "2026-08-20",
+      status: "PRESENT",
+      modifier: null,
+    });
+    expect(first).toEqual({ status: "PRESENT", modifier: null });
+
+    const second = await setAttendance(adminActor(), {
+      userId: memberId,
+      date: "2026-08-20",
+      status: "WFH",
+      modifier: "HALF_DAY",
+    });
+    expect(second).toEqual({ status: "WFH", modifier: "HALF_DAY" });
+
+    const rows = await prisma.attendance.findMany({
+      where: { userId: memberId, date: new Date("2026-08-20") },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("records who marked it", async () => {
+    const row = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: memberId, date: new Date("2026-08-20") } },
+    });
+    expect(row?.markedById).toBe(adminId);
+  });
+
+  it("writes an audit event per change, with the previous value", async () => {
+    const events = await prisma.attendanceEvent.findMany({
+      where: { userId: memberId, date: new Date("2026-08-20") },
+      orderBy: { at: "asc" },
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      fromStatus: null,
+      toStatus: "PRESENT",
+      actorId: adminId,
+    });
+    expect(events[1]).toMatchObject({
+      fromStatus: "PRESENT",
+      fromModifier: null,
+      toStatus: "WFH",
+      toModifier: "HALF_DAY",
+    });
+  });
+
+  it("refuses a future date", async () => {
+    await expect(
+      setAttendance(adminActor(), {
+        userId: memberId,
+        date: "2099-01-01",
+        status: "PRESENT",
+        modifier: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses an invalid combination before it reaches the database", async () => {
+    await expect(
+      setAttendance(adminActor(), {
+        userId: memberId,
+        date: "2026-08-21",
+        status: "ABSENT",
+        modifier: "HALF_DAY",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a member", async () => {
+    await expect(
+      setAttendance(
+        { id: memberId, role: Role.MEMBER, organizationId: orgId },
+        { userId: memberId, date: "2026-08-21", status: "PRESENT", modifier: null },
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("answers the same way for a foreign member and an unknown id", async () => {
+    const foreign = setAttendance(
+      { id: "x", role: Role.ADMIN, organizationId: "another-org" },
+      { userId: memberId, date: "2026-08-21", status: "PRESENT", modifier: null },
+    );
+    const unknown = setAttendance(adminActor(), {
+      userId: "no-such-user",
+      date: "2026-08-21",
+      status: "PRESENT",
+      modifier: null,
+    });
+
+    await expect(foreign).rejects.toMatchObject({ status: 403 });
+    await expect(unknown).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("clearAttendance", () => {
+  it("removes the row and logs the clear", async () => {
+    await setAttendance(adminActor(), {
+      userId: memberId,
+      date: "2026-08-24",
+      status: "PRESENT",
+      modifier: null,
+    });
+    await clearAttendance(adminActor(), { userId: memberId, date: "2026-08-24" });
+
+    const row = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: memberId, date: new Date("2026-08-24") } },
+    });
+    expect(row).toBeNull();
+
+    const last = await prisma.attendanceEvent.findFirst({
+      where: { userId: memberId, date: new Date("2026-08-24") },
+      orderBy: { at: "desc" },
+    });
+    expect(last).toMatchObject({ fromStatus: "PRESENT", toStatus: null });
+  });
+
+  it("is silent on a day that was never marked", async () => {
+    await expect(
+      clearAttendance(adminActor(), { userId: memberId, date: "2026-08-25" }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("toggleAttendanceCode", () => {
+  it("walks a day through the combinations the grid offers", async () => {
+    const on = (code: Parameters<typeof toggleAttendanceCode>[1]["code"]) =>
+      toggleAttendanceCode(adminActor(), { userId: memberId, date: "2026-08-26", code });
+
+    expect(await on("PRESENT")).toEqual({ status: "PRESENT", modifier: null });
+    expect(await on("HALF_DAY")).toEqual({ status: "PRESENT", modifier: "HALF_DAY" });
+    expect(await on("WFH")).toEqual({ status: "WFH", modifier: "HALF_DAY" });
+    expect(await on("SHORT_LEAVE")).toEqual({ status: "WFH", modifier: "SHORT_LEAVE" });
+    expect(await on("ABSENT")).toEqual({ status: "ABSENT", modifier: null });
+    expect(await on("ABSENT")).toBeNull();
+  });
+});
