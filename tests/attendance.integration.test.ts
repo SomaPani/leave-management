@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Role } from "@/generated/prisma/enums";
+import type { Actor } from "@/lib/rbac";
 
 /**
  * Attendance against the Dockerized Postgres.
@@ -86,5 +87,70 @@ describe("the database rejects impossible combinations", () => {
     expect(row.modifier).toBe("SHORT_LEAVE");
     // A DATE column round-trips through UTC midnight.
     expect(row.date.toISOString().slice(0, 10)).toBe("2026-08-18");
+  });
+});
+
+const { listDayAttendance, listRangeAttendance } = await import(
+  "@/lib/attendance-service"
+);
+
+const adminActor = (): Actor => ({
+  id: adminId,
+  role: Role.ADMIN,
+  organizationId: orgId,
+});
+
+describe("listDayAttendance", () => {
+  it("returns every active member, unmarked ones included", async () => {
+    const rows = await listDayAttendance(adminActor(), "2026-08-19");
+    const mine = rows.find((r) => r.member.id === memberId);
+
+    expect(mine).toBeDefined();
+    expect(mine?.state).toBeNull();
+  });
+
+  it("attaches the stored state for a marked day", async () => {
+    const rows = await listDayAttendance(adminActor(), "2026-08-18");
+    const mine = rows.find((r) => r.member.id === memberId);
+
+    expect(mine?.state).toEqual({ status: "WFH", modifier: "SHORT_LEAVE" });
+  });
+
+  it("refuses a member", async () => {
+    await expect(
+      listDayAttendance(
+        { id: memberId, role: Role.MEMBER, organizationId: orgId },
+        "2026-08-18",
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("shows an admin nothing from another organization", async () => {
+    const rows = await listDayAttendance(
+      { id: "someone", role: Role.ADMIN, organizationId: "not-a-real-org" },
+      "2026-08-18",
+    );
+
+    expect(rows).toEqual([]);
+  });
+});
+
+describe("listRangeAttendance", () => {
+  it("returns the marks inside the span, as date strings", async () => {
+    const rows = await listRangeAttendance(adminActor(), {
+      from: "2026-08-17",
+      to: "2026-08-19",
+      userId: memberId,
+    });
+
+    expect(rows).toEqual([
+      { userId: memberId, date: "2026-08-18", status: "WFH", modifier: "SHORT_LEAVE" },
+    ]);
+  });
+
+  it("refuses a reversed span", async () => {
+    await expect(
+      listRangeAttendance(adminActor(), { from: "2026-08-19", to: "2026-08-17" }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });
