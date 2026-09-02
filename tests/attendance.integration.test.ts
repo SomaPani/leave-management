@@ -1,7 +1,26 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Role } from "@/generated/prisma/enums";
 import type { Actor } from "@/lib/rbac";
+
+/**
+ * The session the route handlers read, stubbed. Everything below it — the real
+ * handler, the real policy layer, real Prisma queries — runs for real.
+ *
+ * Hoisted above every dynamic import so the mock is registered before
+ * lib/auth.ts is pulled in by any module under test.
+ */
+const { actorRef } = vi.hoisted(() => ({
+  actorRef: { current: null as Actor | null },
+}));
+
+vi.mock("@/lib/auth", () => ({
+  currentActor: async () => actorRef.current,
+  auth: async () => null,
+  handlers: { GET: () => new Response(), POST: () => new Response() },
+  signIn: async () => undefined,
+  signOut: async () => undefined,
+}));
 
 /**
  * Attendance against the Dockerized Postgres.
@@ -390,5 +409,157 @@ describe("markEveryonePresent", () => {
         "2026-08-27",
       ),
     ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+/* ------------------------------------------------------- the route handlers -- */
+
+const attendanceRoute = await import("@/app/api/attendance/route");
+const dayRoute = await import("@/app/api/attendance/[userId]/[date]/route");
+const bulkRoute = await import("@/app/api/attendance/mark-all-present/route");
+
+const get = (query = "") =>
+  new Request(`http://localhost/api/attendance${query ? `?${query}` : ""}`);
+const put = (body: unknown) =>
+  new Request("http://localhost/api/attendance", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+const post = (body: unknown) =>
+  new Request("http://localhost/api/attendance", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+const del = () => new Request("http://localhost/api/attendance", { method: "DELETE" });
+const dayCtx = (userId: string, date: string) => ({
+  params: Promise.resolve({ userId, date }),
+});
+const actingAs = (actor: Actor | null) => {
+  actorRef.current = actor;
+};
+
+describe("GET /api/attendance", () => {
+  it("401s when nobody is signed in", async () => {
+    actingAs(null);
+    expect((await attendanceRoute.GET(get("date=2026-08-18"))).status).toBe(401);
+  });
+
+  it("403s a member", async () => {
+    actingAs({ id: memberId, role: Role.MEMBER, organizationId: orgId });
+    expect((await attendanceRoute.GET(get("date=2026-08-18"))).status).toBe(403);
+  });
+
+  it("400s without a date or a span", async () => {
+    actingAs(adminActor());
+    expect((await attendanceRoute.GET(get())).status).toBe(400);
+  });
+
+  it("400s a malformed date", async () => {
+    actingAs(adminActor());
+    expect((await attendanceRoute.GET(get("date=18-08-2026"))).status).toBe(400);
+  });
+
+  it("returns the day for an admin", async () => {
+    actingAs(adminActor());
+    const response = await attendanceRoute.GET(get("date=2026-08-18"));
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    const mine = body.find((r: { member: { id: string } }) => r.member.id === memberId);
+    expect(mine.state).toEqual({ status: "WFH", modifier: "SHORT_LEAVE" });
+  });
+
+  it("returns a span for an admin", async () => {
+    actingAs(adminActor());
+    const response = await attendanceRoute.GET(
+      get(`from=2026-08-17&to=2026-08-19&userId=${memberId}`),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      { userId: memberId, date: "2026-08-18", status: "WFH", modifier: "SHORT_LEAVE" },
+    ]);
+  });
+});
+
+describe("PUT /api/attendance/[userId]/[date]", () => {
+  it("stores a combination", async () => {
+    actingAs(adminActor());
+    const response = await dayRoute.PUT(
+      put({ status: "PRESENT", modifier: "SHORT_LEAVE" }),
+      dayCtx(memberId, "2026-08-28"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: "PRESENT",
+      modifier: "SHORT_LEAVE",
+    });
+  });
+
+  it("400s an unknown status", async () => {
+    actingAs(adminActor());
+    const response = await dayRoute.PUT(
+      put({ status: "HOLIDAY" }),
+      dayCtx(memberId, "2026-08-28"),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("400s an invalid combination", async () => {
+    actingAs(adminActor());
+    const response = await dayRoute.PUT(
+      put({ status: "LEAVE", modifier: "HALF_DAY" }),
+      dayCtx(memberId, "2026-08-28"),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("400s a future date", async () => {
+    actingAs(adminActor());
+    const response = await dayRoute.PUT(
+      put({ status: "PRESENT" }),
+      dayCtx(memberId, "2099-01-01"),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("403s an admin from another organization", async () => {
+    actingAs({ id: "x", role: Role.ADMIN, organizationId: "another-org" });
+    const response = await dayRoute.PUT(
+      put({ status: "PRESENT" }),
+      dayCtx(memberId, "2026-08-28"),
+    );
+    expect(response.status).toBe(403);
+  });
+});
+
+describe("DELETE /api/attendance/[userId]/[date]", () => {
+  it("clears the day", async () => {
+    actingAs(adminActor());
+    const response = await dayRoute.DELETE(del(), dayCtx(memberId, "2026-08-28"));
+    expect(response.status).toBe(204);
+
+    const row = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: memberId, date: new Date("2026-08-28") } },
+    });
+    expect(row).toBeNull();
+  });
+});
+
+describe("POST /api/attendance/mark-all-present", () => {
+  it("reports how many gaps it closed", async () => {
+    actingAs(adminActor());
+    const response = await bulkRoute.POST(post({ date: "2026-08-31" }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ filled: 2, skipped: 0 });
+  });
+
+  it("403s a member", async () => {
+    actingAs({ id: memberId, role: Role.MEMBER, organizationId: orgId });
+    expect((await bulkRoute.POST(post({ date: "2026-08-31" }))).status).toBe(403);
   });
 });
