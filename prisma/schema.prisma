@@ -164,8 +164,15 @@ model Attendance {
   modifier AttendanceModifier?
 
   /// Who last wrote this row. The full history is in AttendanceEvent.
-  markedById String
-  markedBy   User   @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+  ///
+  /// Nullable, and SetNull rather than Restrict, because this is attribution
+  /// rather than ownership: an admin who leaves is deleted, and neither
+  /// blocking that delete nor destroying the team's attendance with it is
+  /// acceptable. Null therefore means "the admin who marked this is gone", not
+  /// "nobody marked it" — the service always sets it. AttendanceEvent.actorId
+  /// keeps the original name either way, since it carries no foreign key.
+  markedById String?
+  markedBy   User?   @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

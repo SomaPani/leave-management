@@ -563,3 +563,39 @@ describe("POST /api/attendance/mark-all-present", () => {
     expect((await bulkRoute.POST(post({ date: "2026-08-31" }))).status).toBe(403);
   });
 });
+
+describe("an admin leaving does not take the attendance with them", () => {
+  it("keeps the rows and drops only the attribution", async () => {
+    const leaver = await prisma.user.create({
+      data: {
+        name: "Run Leaver",
+        email: email("leaver"),
+        passwordHash: "x",
+        role: Role.ADMIN,
+        organizationId: orgId,
+      },
+    });
+
+    await setAttendance(
+      { id: leaver.id, role: Role.ADMIN, organizationId: orgId },
+      { userId: memberId, date: "2026-08-14", status: "PRESENT", modifier: null },
+    );
+
+    // The Team screen deactivates rather than deletes, but /api/admins/[id]
+    // hard-deletes an admin, and that must not fail or cascade.
+    await prisma.user.delete({ where: { id: leaver.id } });
+
+    const row = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: memberId, date: new Date("2026-08-14") } },
+    });
+    expect(row).not.toBeNull();
+    expect(row?.status).toBe("PRESENT");
+    expect(row?.markedById).toBeNull();
+
+    // The audit log keeps the original actor: it carries no foreign key.
+    const event = await prisma.attendanceEvent.findFirst({
+      where: { userId: memberId, date: new Date("2026-08-14") },
+    });
+    expect(event?.actorId).toBe(leaver.id);
+  });
+});
