@@ -33,6 +33,22 @@ enum EmploymentStatus {
   INACTIVE
 }
 
+/// The base state of an attendance day. Exactly one applies.
+enum AttendanceStatus {
+  PRESENT
+  WFH
+  ABSENT
+  LEAVE
+}
+
+/// An add-on to a day that was partly worked. Only ever set alongside PRESENT
+/// or WFH, and only one at a time — enforced by the column shape plus a CHECK
+/// constraint in the migration, not by application code alone.
+enum AttendanceModifier {
+  HALF_DAY
+  SHORT_LEAVE
+}
+
 model Organization {
   id String @id @default(cuid())
 
@@ -41,6 +57,9 @@ model Organization {
   createdAt DateTime @default(now())
   users     User[]
   regions   Region[]
+
+  attendance       Attendance[]
+  attendanceEvents AttendanceEvent[]
 }
 
 /// An office/location a team is grouped by on the Team screen.
@@ -101,6 +120,11 @@ model User {
   manager   User?   @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
   reports   User[]  @relation("UserManager")
 
+  // Two relations to Attendance, so both have to be named: the days that are
+  // about this person, and the days this person recorded for someone else.
+  attendance       Attendance[] @relation("AttendanceSubject")
+  attendanceMarked Attendance[] @relation("AttendanceMarkedBy")
+
   phone          String?
   personalEmail  String?
   address        String?
@@ -112,4 +136,74 @@ model User {
   @@unique([organizationId, empId])
   @@index([organizationId])
   @@index([regionId])
+}
+
+/// One member's attendance on one day.
+///
+/// The absence of a row is what "not marked yet" is stored as — there is no
+/// UNMARKED status, so clearing a day is a delete and "how many are unmarked"
+/// is roster size minus row count.
+///
+/// `organizationId` is denormalised from the member's own `User` row so the
+/// screen's hottest query — every mark in one organization on one day — is a
+/// single indexed read with no join. lib/attendance-service.ts always copies it
+/// from the stored user, never from a request body.
+model Attendance {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation("AttendanceSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Stored as DATE, not a timestamp: a day has no time and no offset.
+  date DateTime @db.Date
+
+  status   AttendanceStatus
+  modifier AttendanceModifier?
+
+  /// Who last wrote this row. The full history is in AttendanceEvent.
+  markedById String
+  markedBy   User   @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The natural key. Also the index behind every per-member read.
+  @@unique([userId, date])
+  @@index([organizationId, date])
+}
+
+/// Append-only log of every attendance write. Never updated, never deleted
+/// except with its organization.
+///
+/// This is what makes unlimited backdating safe: a correction made three months
+/// late is traceable rather than prevented.
+///
+/// `userId` and `actorId` are plain columns rather than relations on purpose —
+/// an audit row has to outlive the rows it describes. `organizationId` keeps
+/// its foreign key so the log is removed with the organization it belongs to.
+model AttendanceEvent {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// The member the mark is about.
+  userId String
+  date   DateTime @db.Date
+
+  /// `from*` null means the day had no row; `to*` null means it was cleared.
+  fromStatus   AttendanceStatus?
+  fromModifier AttendanceModifier?
+  toStatus     AttendanceStatus?
+  toModifier   AttendanceModifier?
+
+  /// The admin who made the change.
+  actorId String
+  at      DateTime @default(now())
+
+  @@index([organizationId, date])
+  @@index([userId, date])
 }
