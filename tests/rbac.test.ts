@@ -11,10 +11,12 @@ import {
   canDeleteAdmin,
   canDeleteMember,
   canDeleteOrganization,
+  canListAttendance,
   canListMembers,
   canListOrganizations,
   canListRegions,
   canManageRegions,
+  canMarkAttendance,
   canUpdateAdmin,
   canUpdateMember,
   canUpdateOrganization,
@@ -247,5 +249,38 @@ describe("who can update and delete members", () => {
 
   it("denies an orphaned member with no organization", () => {
     expect(canUpdateMember(adminA, null)).toBe(false);
+  });
+});
+
+describe("who can mark attendance", () => {
+  it("allows an admin inside their own organization", () => {
+    expect(canMarkAttendance(adminA, ORG_A)).toBe(true);
+  });
+
+  it("denies an admin from another organization", () => {
+    expect(canMarkAttendance(adminB, ORG_A)).toBe(false);
+  });
+
+  it("denies a member, even for their own row", () => {
+    expect(canMarkAttendance(memberA, ORG_A)).toBe(false);
+  });
+
+  it("denies a superadmin — they create organizations, not attendance", () => {
+    expect(canMarkAttendance(superadmin, ORG_A)).toBe(false);
+  });
+
+  it("denies an orphaned member with no organization", () => {
+    expect(canMarkAttendance(adminA, null)).toBe(false);
+  });
+});
+
+describe("who can read attendance", () => {
+  it("allows an admin and a superadmin, matching canListMembers", () => {
+    expect(canListAttendance(adminA)).toBe(true);
+    expect(canListAttendance(superadmin)).toBe(true);
+  });
+
+  it("denies a member the whole roster's attendance", () => {
+    expect(canListAttendance(memberA)).toBe(false);
   });
 });

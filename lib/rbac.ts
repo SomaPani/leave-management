@@ -81,6 +81,23 @@ export function canDeleteMember(actor: Actor, memberOrganizationId: string | nul
 }
 
 /**
+ * Attendance is marked by the Admin of the member's own organization.
+ *
+ * Same rule as `canUpdateMember`, and deliberately not widened to SuperAdmin:
+ * a SuperAdmin creates organizations and admins, and what happens inside an
+ * organization is its admin's to record. Reading is the exception, below.
+ *
+ * A MEMBER is excluded even for their own row — attendance is an employer's
+ * record of the day, not a self-service check-in.
+ */
+export function canMarkAttendance(
+  actor: Actor,
+  memberOrganizationId: string | null,
+): boolean {
+  return actor.role === Role.ADMIN && actor.organizationId === memberOrganizationId;
+}
+
+/**
  * Regions — the groupings the Team screen lists people under — are created,
  * renamed and removed by the Admin of the organization they belong to.
  *
@@ -112,6 +129,15 @@ export function canListMembers(actor: Actor): boolean {
  * even though they cannot change them. Scope the query with `visibleOrgId`.
  */
 export function canListRegions(actor: Actor): boolean {
+  return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
+}
+
+/**
+ * Reading attendance follows `canListMembers`, not `canMarkAttendance`: a
+ * SuperAdmin sees every organization, so they may read the attendance inside
+ * one even though they cannot change it. Scope the query with `visibleOrgId`.
+ */
+export function canListAttendance(actor: Actor): boolean {
   return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
 }
 
