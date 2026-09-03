@@ -105,7 +105,7 @@ function pickDefined<T extends object>(input: T): Partial<T> {
  * 400 rather than a 404, so an admin cannot use this endpoint to probe which
  * region ids exist elsewhere.
  */
-async function assertRegionInOrg(
+export async function assertRegionInOrg(
   regionId: string,
   organizationId: string,
 ): Promise<void> {
