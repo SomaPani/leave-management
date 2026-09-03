@@ -22,6 +22,7 @@ const NAV: NavItem[] = [
   { href: "/team", label: "Team" },
   { href: "/setup", label: "Leave setup" },
   { href: "/scores", label: "Employee score board" },
+  { href: "/holidays", label: "Holiday calendar" },
 ];
 
 export default async function LeaveLayout({
