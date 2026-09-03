@@ -599,3 +599,69 @@ describe("an admin leaving does not take the attendance with them", () => {
     expect(event?.actorId).toBe(leaver.id);
   });
 });
+
+const { listMemberMonth } = await import("@/lib/attendance-service");
+
+describe("listMemberMonth", () => {
+  it("gives a member their own month, ascending", async () => {
+    await setAttendance(adminActor(), {
+      userId: memberId,
+      date: "2026-08-03",
+      status: "PRESENT",
+      modifier: null,
+    });
+    await setAttendance(adminActor(), {
+      userId: memberId,
+      date: "2026-08-04",
+      status: "WFH",
+      modifier: "HALF_DAY",
+    });
+
+    const rows = await listMemberMonth(
+      { id: memberId, role: Role.MEMBER, organizationId: orgId },
+      memberId,
+      2026,
+      7,
+    );
+
+    expect(rows.map((r) => r.date)).toContain("2026-08-03");
+    expect(rows.map((r) => r.date)).toContain("2026-08-04");
+    expect(rows.every((r) => r.date.startsWith("2026-08"))).toBe(true);
+  });
+
+  it("excludes the months either side", async () => {
+    const rows = await listMemberMonth(
+      { id: memberId, role: Role.MEMBER, organizationId: orgId },
+      memberId,
+      2026,
+      6, // July — nothing was written there
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("refuses a member reading somebody else", async () => {
+    await expect(
+      listMemberMonth(
+        { id: "someone-else", role: Role.MEMBER, organizationId: orgId },
+        memberId,
+        2026,
+        7,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("lets an admin read a member of their own organization", async () => {
+    const rows = await listMemberMonth(adminActor(), memberId, 2026, 7);
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it("shows an admin from another organization nothing", async () => {
+    const rows = await listMemberMonth(
+      { id: "x", role: Role.ADMIN, organizationId: "another-org" },
+      memberId,
+      2026,
+      7,
+    );
+    expect(rows).toEqual([]);
+  });
+});

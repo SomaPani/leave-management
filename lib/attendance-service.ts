@@ -20,8 +20,10 @@ import {
   HttpError,
   canListAttendance,
   canMarkAttendance,
+  canReadOwnAttendance,
   visibleOrgId,
 } from "@/lib/rbac";
+import { monthBounds } from "@/lib/holidays";
 
 /**
  * Everything that reads or writes the attendance tables.
@@ -142,6 +144,50 @@ export async function listRangeAttendance(
     },
     select: { userId: true, date: true, status: true, modifier: true },
     orderBy: [{ date: "asc" }, { userId: "asc" }],
+  });
+
+  return rows.map((row) => ({
+    userId: row.userId,
+    date: fromDbDate(row.date),
+    status: row.status,
+    modifier: row.modifier,
+  }));
+}
+
+/**
+ * One member's marks for one calendar month.
+ *
+ * Two ways in: the member themselves, or an admin who can already list the
+ * roster. `canReadOwnAttendance` is a bare identity comparison, so the member
+ * path has exactly one way to be wrong and it fails closed. The admin path
+ * reuses `visibleOrgId`, which means a member in another organization returns
+ * an empty month rather than an error that would confirm they exist.
+ *
+ * The member calendar passes `actor.id`, never a value from the request, so
+ * there is nothing for a member to tamper with.
+ */
+export async function listMemberMonth(
+  actor: Actor,
+  userId: string,
+  year: number,
+  month: number,
+): Promise<AttendanceMark[]> {
+  const isSelf = canReadOwnAttendance(actor, userId);
+  if (!isSelf && !canListAttendance(actor)) {
+    throw new HttpError(403, "Your role does not permit this action.");
+  }
+
+  const orgId = isSelf ? actor.organizationId : visibleOrgId(actor);
+  const { from, to } = monthBounds(year, month);
+
+  const rows = await prisma.attendance.findMany({
+    where: {
+      userId,
+      date: { gte: toDbDate(from), lte: toDbDate(to) },
+      ...(orgId ? { organizationId: orgId } : {}),
+    },
+    select: { userId: true, date: true, status: true, modifier: true },
+    orderBy: [{ date: "asc" }],
   });
 
   return rows.map((row) => ({
