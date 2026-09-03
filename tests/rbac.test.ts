@@ -12,11 +12,14 @@ import {
   canDeleteMember,
   canDeleteOrganization,
   canListAttendance,
+  canListHolidays,
   canListMembers,
   canListOrganizations,
   canListRegions,
+  canManageHolidays,
   canManageRegions,
   canMarkAttendance,
+  canReadOwnAttendance,
   canUpdateAdmin,
   canUpdateMember,
   canUpdateOrganization,
@@ -282,5 +285,43 @@ describe("who can read attendance", () => {
 
   it("denies a member the whole roster's attendance", () => {
     expect(canListAttendance(memberA)).toBe(false);
+  });
+});
+
+describe("who can read holidays", () => {
+  it("allows every signed-in role — a member needs their own calendar", () => {
+    expect(canListHolidays(memberA)).toBe(true);
+    expect(canListHolidays(adminA)).toBe(true);
+    expect(canListHolidays(superadmin)).toBe(true);
+  });
+});
+
+describe("who can manage holidays", () => {
+  it("allows an admin inside their own organization", () => {
+    expect(canManageHolidays(adminA, ORG_A)).toBe(true);
+  });
+
+  it("denies an admin from another organization", () => {
+    expect(canManageHolidays(adminB, ORG_A)).toBe(false);
+  });
+
+  it("denies members and superadmins, matching canManageRegions", () => {
+    expect(canManageHolidays(memberA, ORG_A)).toBe(false);
+    expect(canManageHolidays(superadmin, ORG_A)).toBe(false);
+  });
+
+  it("denies an orphaned holiday with no organization", () => {
+    expect(canManageHolidays(adminA, null)).toBe(false);
+  });
+});
+
+describe("who can read one person's attendance", () => {
+  it("allows the person themselves", () => {
+    expect(canReadOwnAttendance(memberA, memberA.id)).toBe(true);
+  });
+
+  it("denies reading somebody else's, even inside one organization", () => {
+    expect(canReadOwnAttendance(memberA, "m2")).toBe(false);
+    expect(canReadOwnAttendance(adminA, memberA.id)).toBe(false);
   });
 });

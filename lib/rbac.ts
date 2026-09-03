@@ -98,6 +98,19 @@ export function canMarkAttendance(
 }
 
 /**
+ * A person may read their own attendance record.
+ *
+ * Deliberately self-only, and deliberately *not* satisfied by an admin: admins
+ * read the roster through `canListAttendance`, which is org-scoped and already
+ * covers them. Keeping this predicate to a single identity comparison means
+ * the member calendar has exactly one way to be wrong, and it is a way that
+ * fails closed.
+ */
+export function canReadOwnAttendance(actor: Actor, userId: string): boolean {
+  return actor.id === userId;
+}
+
+/**
  * Regions — the groupings the Team screen lists people under — are created,
  * renamed and removed by the Admin of the organization they belong to.
  *
@@ -113,6 +126,36 @@ export function canMarkAttendance(
  */
 export function canManageRegions(actor: Actor, regionOrganizationId: string): boolean {
   return actor.role === Role.ADMIN && actor.organizationId === regionOrganizationId;
+}
+
+/**
+ * The holiday calendar is maintained by the Admin of the organization it
+ * belongs to — the same rule as `canManageRegions`, and for the same reason:
+ * a SuperAdmin creates organizations and admins, and what lives inside an
+ * organization is its admin's to manage.
+ *
+ * Pass the *stored* `Holiday.organizationId`, never one from a request body.
+ */
+export function canManageHolidays(
+  actor: Actor,
+  holidayOrganizationId: string | null,
+): boolean {
+  return actor.role === Role.ADMIN && actor.organizationId === holidayOrganizationId;
+}
+
+/**
+ * Reading is wider than every other list in this file: a MEMBER needs the
+ * holiday calendar on their own attendance screen. Scope the query with
+ * `visibleOrgId`, and narrow a member further to their own region in
+ * lib/holiday-service.ts — a holiday is not sensitive, but which office
+ * somebody works in is not this endpoint's to broadcast.
+ */
+export function canListHolidays(actor: Actor): boolean {
+  return (
+    actor.role === Role.SUPERADMIN ||
+    actor.role === Role.ADMIN ||
+    actor.role === Role.MEMBER
+  );
 }
 
 export function canListOrganizations(actor: Actor): boolean {
