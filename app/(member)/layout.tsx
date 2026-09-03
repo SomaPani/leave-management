@@ -2,18 +2,19 @@ import { Role } from "@/generated/prisma/enums";
 import { SidebarNav, type NavItem } from "@/components/sidebar-nav";
 import { Avatar } from "@/components/ui";
 import { auth } from "@/lib/auth";
-import { demoDb, demoMember } from "@/lib/demo-data";
 import { signOutAction } from "@/lib/org-actions";
 import { requirePageRole } from "@/lib/page-guards";
 import { COMPANY_NAME } from "@/lib/seed";
+import { ownProfile } from "@/lib/services";
 
 /**
  * Shell for the member leave screens — the mirror of app/(leave)/layout.tsx.
  *
- * The screens under it render the fixture person (see lib/demo-data.ts), but
- * the sidebar shows whoever is actually signed in: the balances are sample
- * data, the session is not, and conflating the two would be confusing. The job
- * title comes from the fixture, since an Auth.js user has no such field.
+ * The leave screens under it still render the fixture person (see
+ * lib/demo-data.ts); /calendar does not — it reads the signed-in member's own
+ * attendance. The sidebar has always shown whoever is actually signed in, and
+ * the job title now comes from their own `User` row rather than the fixture,
+ * since an Auth.js session carries no such field.
  */
 
 const NAV: NavItem[] = [
@@ -30,9 +31,10 @@ export default async function MemberLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requirePageRole(Role.MEMBER);
+  const actor = await requirePageRole(Role.MEMBER);
   const session = await auth();
-  const title = demoMember(demoDb()).title;
+  const profile = await ownProfile(actor);
+  const title = profile.title ?? "Team member";
 
   const name = session?.user?.name ?? "Member";
   const initials = name

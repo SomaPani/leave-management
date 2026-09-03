@@ -318,6 +318,27 @@ export async function listMembers(
   });
 }
 
+/**
+ * The signed-in person's own profile.
+ *
+ * No policy check: the only id it accepts is the actor's own, so there is
+ * nothing to authorize. Used by the member shell for the sidebar and by the
+ * calendar for the region its holiday list is scoped to.
+ */
+export async function ownProfile(actor: Actor) {
+  const user = await prisma.user.findUnique({
+    where: { id: actor.id },
+    select: {
+      id: true,
+      name: true,
+      title: true,
+      region: { select: { id: true, name: true } },
+    },
+  });
+  if (!user) throw new HttpError(401, "Your account no longer exists.");
+  return user;
+}
+
 /* ------------------------------------------------- update and delete --- */
 
 /**

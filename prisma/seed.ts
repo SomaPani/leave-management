@@ -200,6 +200,72 @@ async function seedAttendance(
   return count;
 }
 
+/**
+ * The 2026 holiday calendar for the seeded organization.
+ *
+ * Region names are resolved to the rows the seed just created; a holiday with
+ * no region applies to the whole organization. Idempotent by (name, startDate,
+ * regionId), the same key the bulk endpoint uses — re-running the seed adds
+ * nothing.
+ */
+const SEED_HOLIDAYS: {
+  name: string;
+  startDate: string;
+  endDate?: string;
+  region?: string;
+}[] = [
+  { name: "New Year's Day", startDate: "2026-01-01" },
+  { name: "Pongal", startDate: "2026-01-15", region: "Chennai" },
+  { name: "Republic Day", startDate: "2026-01-26" },
+  { name: "Holi", startDate: "2026-03-03", region: "Delhi" },
+  { name: "Independence Day", startDate: "2026-08-15" },
+  { name: "Gandhi Jayanti", startDate: "2026-10-02" },
+  { name: "Diwali", startDate: "2026-11-08", endDate: "2026-11-09" },
+  { name: "Christmas", startDate: "2026-12-25" },
+];
+
+async function seedHolidays(
+  organizationId: string,
+  regions: { id: string; name: string }[],
+): Promise<number> {
+  const regionId = new Map(regions.map((r) => [r.name, r.id]));
+
+  const existing = await prisma.holiday.findMany({
+    where: { organizationId },
+    select: { name: true, startDate: true, regionId: true },
+  });
+  const seen = new Set(
+    existing.map(
+      (h) => `${h.name}|${h.startDate.toISOString().slice(0, 10)}|${h.regionId ?? ""}`,
+    ),
+  );
+
+  let created = 0;
+  for (const holiday of SEED_HOLIDAYS) {
+    const region = holiday.region ? (regionId.get(holiday.region) ?? null) : null;
+    // A holiday naming a region the organization does not have is skipped
+    // rather than silently widened to everyone.
+    if (holiday.region && !region) continue;
+
+    const key = `${holiday.name}|${holiday.startDate}|${region ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    await prisma.holiday.create({
+      data: {
+        organizationId,
+        regionId: region,
+        name: holiday.name,
+        startDate: new Date(`${holiday.startDate}T00:00:00.000Z`),
+        endDate: new Date(`${holiday.endDate ?? holiday.startDate}T00:00:00.000Z`),
+      },
+    });
+    created++;
+  }
+
+  return created;
+}
+
 async function main(): Promise<void> {
   const orgName = required("STACX_ORG_NAME");
   const adminName = required("STACX_ADMIN_NAME");
@@ -289,6 +355,7 @@ async function main(): Promise<void> {
   });
 
   const attendanceRows = await seedAttendance(seeded.organization.id, seeded.admin.id);
+  const holidayRows = await seedHolidays(seeded.organization.id, seeded.regions);
 
   console.log(
     `Seeded organization "${seeded.organization.name}" (${seeded.organization.id}) with admin ${seeded.admin.email}`,
@@ -310,6 +377,8 @@ async function main(): Promise<void> {
       ? `Attendance: ${attendanceRows} rows across the last 10 weekdays.`
       : "Attendance: skipped (no members in this organization).",
   );
+
+  console.log(`Holidays: ${holidayRows} added for 2026.`);
 }
 
 main()

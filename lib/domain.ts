@@ -1,7 +1,6 @@
 import {
   daysInMonth,
   firstWeekdayOfMonth,
-  isWeekend,
   isoDate,
   workdays,
 } from "@/lib/date";
@@ -196,91 +195,12 @@ export function attendanceOptionsFor(db: Db, userId: string): AttendanceCode[] {
     : ["present", "wfh", "half", "absent", "leave", "short"];
 }
 
-export type CalendarCell = {
-  key: string;
-  /** `null` for the padding cells before the 1st and after the last day. */
-  day: number | null;
-  date: string | null;
-  weekend: boolean;
-  codes: AttendanceCode[];
-};
-
-/** A 7-column month grid of one person's attendance. */
-export function attendanceMonth(
-  db: Db,
-  userId: string,
-  year: number,
-  month: number,
-): CalendarCell[] {
-  const cells: CalendarCell[] = [];
-  const lead = firstWeekdayOfMonth(year, month);
-
-  for (let i = 0; i < lead; i++) {
-    cells.push({ key: `lead-${i}`, day: null, date: null, weekend: false, codes: [] });
-  }
-
-  const total = daysInMonth(year, month);
-  for (let day = 1; day <= total; day++) {
-    const date = isoDate(year, month, day);
-    const weekend = isWeekend(date);
-    cells.push({
-      key: date,
-      day,
-      date,
-      weekend,
-      codes: weekend ? [] : attendanceCodes(db, userId, date),
-    });
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push({
-      key: `tail-${cells.length}`,
-      day: null,
-      date: null,
-      weekend: false,
-      codes: [],
-    });
-  }
-
-  return cells;
-}
-
-/** Present / half / absent counts plus an attendance percentage for one month. */
-export function attendanceStats(db: Db, userId: string, year: number, month: number) {
-  const record = db.attendance[userId] ?? {};
-  const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const keys = Object.keys(record).filter((k) => k.startsWith(prefix));
-
-  const count = (code: AttendanceCode) =>
-    keys.filter((k) => {
-      const mark = record[k];
-      return Array.isArray(mark) ? mark.includes(code) : mark === code;
-    }).length;
-
-  const present = count("present");
-  const half = count("half");
-  const absent = count("absent");
-  const worked = present + half * 0.5;
-
-  return {
-    present,
-    half,
-    absent,
-    percent: keys.length ? `${Math.round((worked / keys.length) * 100)}%` : "—",
-  };
-}
-
 /* -------------------------------------------------------------- holidays -- */
 
 export function holidaysForRegion(db: Db, region: string): Holiday[] {
   return db.holidays
     .filter((h) => !h.region || h.region === region)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
-}
-
-/** Which region's holiday list a person sees: admins choose, members get theirs. */
-export function viewingRegion(db: Db, user: Person): string {
-  return user.role === "admin" ? db.holidayRegion : (user.region ?? "Chennai");
 }
 
 /** Every ISO date covered by a holiday, mapped to the holiday's name. */
