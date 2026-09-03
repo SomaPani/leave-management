@@ -60,6 +60,7 @@ model Organization {
 
   attendance       Attendance[]
   attendanceEvents AttendanceEvent[]
+  holidays         Holiday[]
 }
 
 /// An office/location a team is grouped by on the Team screen.
@@ -72,6 +73,7 @@ model Region {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   users          User[]
+  holidays       Holiday[]
   createdAt      DateTime     @default(now())
 
   @@unique([organizationId, name])
@@ -213,4 +215,38 @@ model AttendanceEvent {
 
   @@index([organizationId, date])
   @@index([userId, date])
+}
+
+/// A public holiday for one organization, optionally narrowed to one region.
+///
+/// The range is inclusive and stored as two DATE columns rather than a start
+/// plus a day count: "which holidays touch September" is then one indexed
+/// predicate instead of an expansion in application code, which is what
+/// `holidayDateMap()` has to do with the fixture today.
+///
+/// A null `regionId` means the holiday applies to every region in the
+/// organization — the same rule the fixture expresses by omitting `region`.
+model Holiday {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Null = every region in the organization.
+  regionId String?
+  region   Region? @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  name String
+
+  /// Inclusive. A single-day holiday has startDate == endDate.
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, startDate])
+  @@index([regionId])
 }
