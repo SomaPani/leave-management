@@ -372,3 +372,152 @@ describe("updateHoliday and deleteHoliday", () => {
     ).rejects.toMatchObject({ status: 403 });
   });
 });
+
+const holidaysRoute = await import("@/app/api/holidays/route");
+const holidayByIdRoute = await import("@/app/api/holidays/[id]/route");
+const bulkRoute = await import("@/app/api/holidays/bulk/route");
+
+const get = (query = "") =>
+  new Request(`http://localhost/api/holidays${query ? `?${query}` : ""}`);
+const post = (body: unknown) =>
+  new Request("http://localhost/api/holidays", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+const patch = (body: unknown) =>
+  new Request("http://localhost/api/holidays", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+const del = () => new Request("http://localhost/api/holidays", { method: "DELETE" });
+const idCtx = (id: string) => ({ params: Promise.resolve({ id }) });
+const actingAs = (actor: Actor | null) => {
+  actorRef.current = actor;
+};
+
+describe("GET /api/holidays", () => {
+  it("401s when nobody is signed in", async () => {
+    actingAs(null);
+    expect((await holidaysRoute.GET(get("year=2026"))).status).toBe(401);
+  });
+
+  it("400s a nonsense year", async () => {
+    actingAs(adminActor());
+    expect((await holidaysRoute.GET(get("year=abcd"))).status).toBe(400);
+    expect((await holidaysRoute.GET(get("year=999999"))).status).toBe(400);
+  });
+
+  it("defaults to the current year when none is given", async () => {
+    actingAs(adminActor());
+    const response = await holidaysRoute.GET(get());
+    expect(response.status).toBe(200);
+    expect(Array.isArray(await response.json())).toBe(true);
+  });
+
+  it("lets a member read their own region's calendar", async () => {
+    actingAs(memberActor());
+    const response = await holidaysRoute.GET(get("year=2026"));
+
+    expect(response.status).toBe(200);
+    const names = (await response.json()).map((h: { name: string }) => h.name);
+    expect(names).toContain("Pongal");
+    expect(names).not.toContain("Holi");
+  });
+});
+
+describe("POST /api/holidays", () => {
+  it("creates a single-day holiday from just a name and a start", async () => {
+    actingAs(adminActor());
+    const response = await holidaysRoute.POST(
+      post({ name: "Founders Day", startDate: "2026-02-11" }),
+    );
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.startDate).toBe("2026-02-11");
+    expect(body.endDate).toBe("2026-02-11");
+  });
+
+  it("400s a missing name and a malformed date", async () => {
+    actingAs(adminActor());
+    expect((await holidaysRoute.POST(post({ startDate: "2026-02-11" }))).status).toBe(
+      400,
+    );
+    expect(
+      (await holidaysRoute.POST(post({ name: "Bad", startDate: "11-02-2026" }))).status,
+    ).toBe(400);
+  });
+
+  it("403s a member", async () => {
+    actingAs(memberActor());
+    expect(
+      (await holidaysRoute.POST(post({ name: "Nope", startDate: "2026-02-12" })))
+        .status,
+    ).toBe(403);
+  });
+});
+
+describe("POST /api/holidays/bulk", () => {
+  it("loads several and reports what it skipped", async () => {
+    actingAs(adminActor());
+    const response = await bulkRoute.POST(
+      post({
+        holidays: [
+          { name: "Independence Day", startDate: "2026-08-15" },
+          { name: "Founders Day", startDate: "2026-02-11" }, // already there
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ created: 1, skipped: 1 });
+  });
+
+  it("400s a body that is not a list", async () => {
+    actingAs(adminActor());
+    expect((await bulkRoute.POST(post({ holidays: "nope" }))).status).toBe(400);
+  });
+});
+
+describe("PATCH and DELETE /api/holidays/[id]", () => {
+  it("renames a holiday", async () => {
+    actingAs(adminActor());
+    const created = await createHoliday(adminActor(), {
+      name: "Route Test",
+      startDate: "2026-09-09",
+      endDate: "2026-09-09",
+      regionId: null,
+      note: null,
+    });
+
+    const response = await holidayByIdRoute.PATCH(
+      patch({ name: "Route Test Renamed", note: "moved" }),
+      idCtx(created.id),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      name: "Route Test Renamed",
+      note: "moved",
+    });
+
+    const removed = await holidayByIdRoute.DELETE(del(), idCtx(created.id));
+    expect(removed.status).toBe(204);
+  });
+
+  it("404s an unknown id", async () => {
+    actingAs(adminActor());
+    expect(
+      (await holidayByIdRoute.PATCH(patch({ name: "x" }), idCtx("nope"))).status,
+    ).toBe(404);
+  });
+
+  it("403s a member", async () => {
+    actingAs(memberActor());
+    expect(
+      (await holidayByIdRoute.DELETE(del(), idCtx("anything"))).status,
+    ).toBe(403);
+  });
+});
