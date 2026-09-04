@@ -32,7 +32,7 @@ export default async function ApplyPage({
   const year = chargeYear(today);
 
   const [summary, holidays] = await Promise.all([
-    listOwnLeaveSummary(actor, year),
+    listOwnLeaveSummary(actor),
     // This year and the next: somebody planning in December is picking dates
     // in January, and a preview that quietly stopped counting holidays at the
     // year boundary would be wrong exactly when it matters most.

@@ -267,35 +267,45 @@ async function seedHolidays(
 }
 
 /**
+ * The day the leave scheme goes live.
+ *
+ * The only place this date is written other than the migration that
+ * backfilled it. Application code reads `LeavePolicy.effectiveFrom` and never
+ * a literal.
+ */
+const LEAVE_SCHEME_START = "2026-09-01";
+
+/**
  * The leave entitlements granted to the seeded organization.
  *
- * These are the four the fixture in lib/seed.ts hardcoded, now owned by an
- * organization that can change them. Idempotent by (organizationId, name) —
- * the unique index — so re-running the seed adds nothing and, importantly,
- * does not reset an allowance an admin has since edited.
+ * Idempotent by (organizationId, name) — the unique index — so re-running the
+ * seed adds nothing and does not reset an allowance an admin has edited. The
+ * migration renamed `Casual` to `Casual Leave (CL)`, so that entry is skipped
+ * on an existing database and only `Earned Leave (EL)` is added.
  */
 const SEED_LEAVE_POLICIES: {
   name: string;
   note: string;
   allowance: number;
   unit?: "USES";
+  accrual?: "MONTHLY";
+  prorated?: boolean;
   carry?: boolean;
+  cap?: number;
 }[] = [
   {
-    name: "Casual",
-    note: "Short personal breaks, applied at least a day ahead.",
+    name: "Casual Leave (CL)",
+    note: "Six days a year, credited in full on 1 January.",
     allowance: 6,
+    prorated: true,
   },
   {
-    name: "Sick",
-    note: "No notice needed. Doctor's note past three days.",
-    allowance: 6,
-  },
-  {
-    name: "Paid / annual",
-    note: "Accrues monthly. Two weeks' notice for 5+ days.",
-    allowance: 18,
+    name: "Earned Leave (EL)",
+    note: "One day credited on the first of every month, carried forward up to 20.",
+    allowance: 12,
+    accrual: "MONTHLY",
     carry: true,
+    cap: 20,
   },
   {
     name: "Short leave",
@@ -323,8 +333,11 @@ async function seedLeavePolicies(organizationId: string): Promise<number> {
         note: policy.note,
         allowance: policy.allowance,
         unit: policy.unit ?? "DAYS",
+        accrual: policy.accrual ?? "UPFRONT",
+        prorated: policy.prorated ?? false,
         carry: policy.carry ?? false,
-        effectiveFrom: new Date("2026-09-01T00:00:00.000Z"),
+        cap: policy.cap ?? null,
+        effectiveFrom: new Date(`${LEAVE_SCHEME_START}T00:00:00.000Z`),
         // The array's order is the select's order.
         position,
       },
