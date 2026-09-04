@@ -49,6 +49,21 @@ enum AttendanceModifier {
   SHORT_LEAVE
 }
 
+/// How a leave policy is counted. `DAYS` charges working days in the range;
+/// `USES` charges one occurrence however long the range is — the rule the
+/// fixture expressed by matching the literal name "Short leave".
+enum LeaveUnit {
+  DAYS
+  USES
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
 model Organization {
   id String @id @default(cuid())
 
@@ -61,6 +76,9 @@ model Organization {
   attendance       Attendance[]
   attendanceEvents AttendanceEvent[]
   holidays         Holiday[]
+
+  leavePolicies LeavePolicy[]
+  leaveRequests LeaveRequest[]
 }
 
 /// An office/location a team is grouped by on the Team screen.
@@ -126,6 +144,11 @@ model User {
   // about this person, and the days this person recorded for someone else.
   attendance       Attendance[] @relation("AttendanceSubject")
   attendanceMarked Attendance[] @relation("AttendanceMarkedBy")
+
+  // Two relations again, for the same reason: the requests this person filed,
+  // and the requests routed to them for a decision.
+  leaveRequests  LeaveRequest[] @relation("LeaveRequestSubject")
+  leaveApprovals LeaveRequest[] @relation("LeaveRequestApprover")
 
   phone          String?
   personalEmail  String?
@@ -249,4 +272,100 @@ model Holiday {
 
   @@index([organizationId, startDate])
   @@index([regionId])
+}
+
+/// A leave entitlement an organization grants, per calendar year.
+///
+/// Org-scoped rather than global — the same reasoning as `Region`: two
+/// organizations may both grant "Casual" without sharing a row, and one of
+/// them may grant eight days where the other grants six.
+model LeavePolicy {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name String
+  note String?
+
+  /// Working days per year for a DAYS policy; occurrences for a USES one.
+  allowance Int
+  unit      LeaveUnit @default(DAYS)
+
+  /// Whether an unused balance rolls into next year. Carried for the Setup
+  /// screen's benefit; nothing reads it yet, because nothing computes a
+  /// second year yet.
+  carry Boolean @default(false)
+
+  /// Render order in the Apply form's select. Ties break on name.
+  position Int @default(0)
+
+  /// A policy with requests against it is retired, not deleted — see the
+  /// `Restrict` on LeaveRequest.policyId. Inactive policies drop out of the
+  /// Apply select but keep every request they already priced readable.
+  active Boolean @default(true)
+
+  requests LeaveRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+/// One member's application for leave.
+///
+/// `organizationId` is denormalised from the applicant's own `User` row so the
+/// approvals queue — every request in one organization over a span — is a
+/// single indexed read with no join. lib/leave-service.ts always copies it
+/// from the stored user, never from a request body: the same rule
+/// lib/attendance-service.ts follows.
+model LeaveRequest {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("LeaveRequestSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// A reference, not the policy's name: renaming "Paid / annual" must not
+  /// orphan a year of requests. The same reasoning as `User.managerId`.
+  ///
+  /// Restrict, so a policy with history cannot be deleted out from under it.
+  /// Retiring a policy is `active = false`.
+  policyId String
+  policy   LeavePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  /// Inclusive. A USES request has startDate == endDate.
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+
+  /// Working days charged, computed at submit against weekends and the
+  /// applicant's region's holidays. Stored rather than derived: it is the
+  /// price frozen at submit, and a holiday added in November must not
+  /// re-price a request approved in September.
+  cost Int
+
+  reason String?
+
+  status LeaveRequestStatus @default(PENDING)
+
+  /// Who it went to at submit time — the applicant's manager, or an admin.
+  ///
+  /// Nullable and SetNull rather than Restrict, for the reason
+  /// `Attendance.markedById` gives: this is routing, not ownership. An
+  /// approver who leaves is deleted, and neither blocking that delete nor
+  /// destroying the team's leave history with it is acceptable.
+  approverId String?
+  approver   User?   @relation("LeaveRequestApprover", fields: [approverId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The approvals queue: one organization, ordered by date.
+  @@index([organizationId, startDate])
+  /// The balance query and the overlap check: one member, filtered by status.
+  @@index([userId, status])
 }
