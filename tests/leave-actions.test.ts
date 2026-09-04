@@ -76,7 +76,12 @@ beforeAll(async () => {
   member = { id: memberId, role: Role.MEMBER, organizationId: orgId };
 
   const casual = await prisma.leavePolicy.create({
-    data: { organizationId: orgId, name: "Casual", allowance: 6 },
+    data: {
+      organizationId: orgId,
+      name: "Casual",
+      allowance: 6,
+      effectiveFrom: new Date("2026-01-01"),
+    },
   });
   casualId = casual.id;
 });

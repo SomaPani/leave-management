@@ -57,6 +57,14 @@ enum LeaveUnit {
   USES
 }
 
+/// How a policy's entitlement arrives.
+enum LeaveAccrual {
+  /// The whole year's share at once, on 1 January or the accrual start.
+  UPFRONT
+  /// One-twelfth on the first of each month.
+  MONTHLY
+}
+
 enum LeaveRequestStatus {
   PENDING
   APPROVED
@@ -292,9 +300,24 @@ model LeavePolicy {
   allowance Int
   unit      LeaveUnit @default(DAYS)
 
-  /// Whether an unused balance rolls into next year. Carried for the Setup
-  /// screen's benefit; nothing reads it yet, because nothing computes a
-  /// second year yet.
+  accrual LeaveAccrual @default(UPFRONT)
+
+  /// Whether a partial first year is scaled down. UPFRONT only; a MONTHLY
+  /// policy pro-rates inherently by crediting fewer months.
+  prorated Boolean @default(false)
+
+  /// Ceiling on a balance carried across a year boundary. Null means no
+  /// ceiling. Only meaningful when `carry` is true — a policy that lapses
+  /// has nothing to cap.
+  cap Int?
+
+  /// The day this entitlement starts existing — the scheme start. Per policy
+  /// rather than per organization, so a policy introduced later simply starts
+  /// later, with no separate concept to keep in step.
+  effectiveFrom DateTime @db.Date
+
+  /// Whether an unused balance survives 31 December. EL carries; CL and
+  /// Short leave lapse.
   carry Boolean @default(false)
 
   /// Render order in the Apply form's select. Ties break on name.

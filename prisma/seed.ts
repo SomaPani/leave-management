@@ -324,6 +324,7 @@ async function seedLeavePolicies(organizationId: string): Promise<number> {
         allowance: policy.allowance,
         unit: policy.unit ?? "DAYS",
         carry: policy.carry ?? false,
+        effectiveFrom: new Date("2026-09-01T00:00:00.000Z"),
         // The array's order is the select's order.
         position,
       },

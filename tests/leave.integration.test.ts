@@ -95,7 +95,13 @@ beforeAll(async () => {
   memberId = member.id;
 
   const casual = await prisma.leavePolicy.create({
-    data: { organizationId: orgId, name: "Casual", allowance: 6, position: 0 },
+    data: {
+      organizationId: orgId,
+      name: "Casual",
+      allowance: 6,
+      position: 0,
+      effectiveFrom: new Date("2026-01-01"),
+    },
   });
   casualId = casual.id;
 
@@ -106,12 +112,18 @@ beforeAll(async () => {
       allowance: 4,
       unit: "USES",
       position: 3,
+      effectiveFrom: new Date("2026-01-01"),
     },
   });
   shortId = short.id;
 
   const foreign = await prisma.leavePolicy.create({
-    data: { organizationId: otherOrgId, name: "Casual", allowance: 6 },
+    data: {
+      organizationId: otherOrgId,
+      name: "Casual",
+      allowance: 6,
+      effectiveFrom: new Date("2026-01-01"),
+    },
   });
   otherPolicyId = foreign.id;
 });
@@ -175,7 +187,12 @@ describe("the database enforces what the schema cannot say", () => {
   it("refuses a negative allowance", async () => {
     await expect(
       prisma.leavePolicy.create({
-        data: { organizationId: orgId, name: "Impossible", allowance: -1 },
+        data: {
+          organizationId: orgId,
+          name: "Impossible",
+          allowance: -1,
+          effectiveFrom: new Date("2026-01-01"),
+        },
       }),
     ).rejects.toThrow();
   });
@@ -183,7 +200,12 @@ describe("the database enforces what the schema cannot say", () => {
   it("refuses two policies with one name in one organization", async () => {
     await expect(
       prisma.leavePolicy.create({
-        data: { organizationId: orgId, name: "Casual", allowance: 9 },
+        data: {
+          organizationId: orgId,
+          name: "Casual",
+          allowance: 9,
+          effectiveFrom: new Date("2026-01-01"),
+        },
       }),
     ).rejects.toThrow();
   });
@@ -213,6 +235,61 @@ describe("the database enforces what the schema cannot say", () => {
     ).rejects.toThrow();
 
     await prisma.leaveRequest.delete({ where: { id: request.id } });
+  });
+
+  it("refuses a MONTHLY allowance that will not divide into twelve months", async () => {
+    await expect(
+      prisma.leavePolicy.create({
+        data: {
+          organizationId: orgId,
+          name: "Awkward",
+          allowance: 13,
+          accrual: "MONTHLY",
+          effectiveFrom: new Date("2026-01-01"),
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("accepts a MONTHLY allowance that divides evenly", async () => {
+    const monthly = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: "Divisible",
+        allowance: 12,
+        accrual: "MONTHLY",
+        effectiveFrom: new Date("2026-01-01"),
+      },
+    });
+    expect(monthly.allowance).toBe(12);
+    await prisma.leavePolicy.delete({ where: { id: monthly.id } });
+  });
+
+  it("leaves an UPFRONT allowance free of the divisibility rule", async () => {
+    const odd = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: "Odd",
+        allowance: 13,
+        effectiveFrom: new Date("2026-01-01"),
+      },
+    });
+    expect(odd.allowance).toBe(13);
+    await prisma.leavePolicy.delete({ where: { id: odd.id } });
+  });
+
+  it("refuses a negative cap", async () => {
+    await expect(
+      prisma.leavePolicy.create({
+        data: {
+          organizationId: orgId,
+          name: "Negative cap",
+          allowance: 12,
+          cap: -1,
+          effectiveFrom: new Date("2026-01-01"),
+        },
+      }),
+    ).rejects.toThrow();
   });
 });
 
@@ -263,6 +340,7 @@ describe("listing leave policies", () => {
         name: "Sabbatical",
         allowance: 30,
         active: false,
+        effectiveFrom: new Date("2026-01-01"),
       },
     });
 
@@ -547,6 +625,7 @@ describe("filing a leave request", () => {
         name: "Retired",
         allowance: 5,
         active: false,
+        effectiveFrom: new Date("2026-01-01"),
       },
     });
 
