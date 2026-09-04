@@ -23,6 +23,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 const { prisma } = await import("@/lib/prisma");
+const service = await import("@/lib/leave-service");
 
 const RUN = `lv-${Date.now().toString(36)}`;
 const email = (local: string) => `${RUN}-${local}@example.test`;
@@ -210,5 +211,410 @@ describe("the database enforces what the schema cannot say", () => {
     ).rejects.toThrow();
 
     await prisma.leaveRequest.delete({ where: { id: request.id } });
+  });
+});
+
+const memberActor = (): Actor => ({
+  id: memberId,
+  role: Role.MEMBER,
+  organizationId: orgId,
+});
+
+const adminActor = (): Actor => ({
+  id: adminId,
+  role: Role.ADMIN,
+  organizationId: orgId,
+});
+
+const superActor = (): Actor => ({
+  id: "super",
+  role: Role.SUPERADMIN,
+  organizationId: null,
+});
+
+async function clearRequests(): Promise<void> {
+  await prisma.leaveRequest.deleteMany({ where: { organizationId: orgId } });
+}
+
+async function clearHolidays(): Promise<void> {
+  await prisma.holiday.deleteMany({ where: { organizationId: orgId } });
+}
+
+describe("listing leave policies", () => {
+  it("returns the caller's own organization's active policies, in order", async () => {
+    const policies = await service.listLeavePolicies(memberActor());
+
+    expect(policies.map((p) => p.name)).toEqual(["Casual", "Short leave"]);
+    expect(policies[0]).toMatchObject({ allowance: 6, unit: "DAYS" });
+    expect(policies[1]).toMatchObject({ allowance: 4, unit: "USES" });
+  });
+
+  it("never returns another organization's policies", async () => {
+    const policies = await service.listLeavePolicies(memberActor());
+    expect(policies.map((p) => p.id)).not.toContain(otherPolicyId);
+  });
+
+  it("hides a retired policy", async () => {
+    const retired = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: "Sabbatical",
+        allowance: 30,
+        active: false,
+      },
+    });
+
+    const policies = await service.listLeavePolicies(memberActor());
+    expect(policies.map((p) => p.name)).not.toContain("Sabbatical");
+
+    await prisma.leavePolicy.delete({ where: { id: retired.id } });
+  });
+
+  it("refuses a superadmin, who has no organization to have policies in", async () => {
+    await expect(service.listLeavePolicies(superActor())).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+});
+
+describe("the member's own leave summary", () => {
+  it("starts every balance at the full allowance", async () => {
+    await clearRequests();
+    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+
+    expect(summary.year).toBe(2026);
+    expect(summary.balances).toEqual([
+      expect.objectContaining({ name: "Casual", used: 0, balance: 6 }),
+      expect.objectContaining({ name: "Short leave", used: 0, balance: 4 }),
+    ]);
+  });
+
+  it("routes to the applicant's manager", async () => {
+    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+    expect(summary.approver).toEqual({ id: managerId, name: "Run Manager" });
+  });
+
+  it("falls back to an admin when the applicant has no manager", async () => {
+    // The manager has none of their own.
+    const summary = await service.listOwnLeaveSummary(
+      { id: managerId, role: Role.MEMBER, organizationId: orgId },
+      2026,
+    );
+    expect(summary.approver).toEqual({ id: adminId, name: "Run Admin" });
+  });
+
+  it("counts a pending request against the balance", async () => {
+    await clearRequests();
+    await clearHolidays();
+
+    // Monday to Wednesday: three working days.
+    await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-09-07",
+      endDate: "2026-09-09",
+      reason: null,
+    });
+
+    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+    expect(summary.balances[0]).toMatchObject({ used: 3, balance: 3 });
+  });
+
+  it("frees the days again when the request is withdrawn", async () => {
+    await prisma.leaveRequest.updateMany({
+      where: { userId: memberId },
+      data: { status: "WITHDRAWN" },
+    });
+
+    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+    expect(summary.balances[0]).toMatchObject({ used: 0, balance: 6 });
+  });
+
+  it("charges a year-spanning request to the year it starts in", async () => {
+    await clearRequests();
+
+    // 31 December 2026 is a Thursday; the request runs into January.
+    await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-12-31",
+      endDate: "2027-01-01",
+      reason: null,
+    });
+
+    const in2026 = await service.listOwnLeaveSummary(memberActor(), 2026);
+    const in2027 = await service.listOwnLeaveSummary(memberActor(), 2027);
+
+    expect(in2026.balances[0].used).toBe(2);
+    expect(in2027.balances[0].used).toBe(0);
+  });
+});
+
+describe("filing a leave request", () => {
+  it("stores the working days, the organization and a PENDING status", async () => {
+    await clearRequests();
+    await clearHolidays();
+
+    const created = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-09-11",
+      endDate: "2026-09-14",
+      reason: "Family thing",
+    });
+
+    // Friday and Monday; the weekend between them is free.
+    expect(created).toMatchObject({
+      cost: 2,
+      status: "PENDING",
+      startDate: "2026-09-11",
+      endDate: "2026-09-14",
+      reason: "Family thing",
+      approver: { id: managerId, name: "Run Manager" },
+    });
+
+    const stored = await prisma.leaveRequest.findUnique({
+      where: { id: created.id },
+      select: { organizationId: true, userId: true },
+    });
+    expect(stored).toEqual({ organizationId: orgId, userId: memberId });
+  });
+
+  it("does not charge a holiday in the applicant's own region", async () => {
+    await clearRequests();
+    await clearHolidays();
+
+    await prisma.holiday.create({
+      data: {
+        organizationId: orgId,
+        regionId: chennaiId,
+        name: "Diwali",
+        startDate: new Date("2026-11-08"),
+        endDate: new Date("2026-11-09"),
+      },
+    });
+
+    // Monday to Wednesday, with the Monday covered by Diwali.
+    const created = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-09",
+      endDate: "2026-11-11",
+      reason: null,
+    });
+
+    expect(created.cost).toBe(2);
+  });
+
+  it("does charge a holiday that belongs to another region", async () => {
+    await clearRequests();
+    await clearHolidays();
+
+    await prisma.holiday.create({
+      data: {
+        organizationId: orgId,
+        regionId: delhiId,
+        name: "Delhi-only day",
+        startDate: new Date("2026-11-09"),
+        endDate: new Date("2026-11-09"),
+      },
+    });
+
+    // The member is in Chennai, so the Delhi holiday is a working day for them.
+    const created = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-09",
+      endDate: "2026-11-11",
+      reason: null,
+    });
+
+    expect(created.cost).toBe(3);
+  });
+
+  it("keeps the cost it was priced at when a holiday is added later", async () => {
+    await clearRequests();
+    await clearHolidays();
+
+    const created = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-09",
+      endDate: "2026-11-11",
+      reason: null,
+    });
+    expect(created.cost).toBe(3);
+
+    await prisma.holiday.create({
+      data: {
+        organizationId: orgId,
+        regionId: chennaiId,
+        name: "Declared afterwards",
+        startDate: new Date("2026-11-10"),
+        endDate: new Date("2026-11-10"),
+      },
+    });
+
+    const reread = await service.findOwnLeaveRequest(memberActor(), created.id);
+    expect(reread?.cost).toBe(3);
+  });
+
+  it("collapses a USES request to one day and one use", async () => {
+    await clearRequests();
+    await clearHolidays();
+
+    const created = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: shortId,
+      startDate: "2026-09-07",
+      endDate: "2026-09-30",
+      reason: null,
+    });
+
+    expect(created).toMatchObject({
+      cost: 1,
+      startDate: "2026-09-07",
+      endDate: "2026-09-07",
+    });
+  });
+
+  it("refuses a range that overlaps an existing pending request", async () => {
+    await clearRequests();
+    await clearHolidays();
+
+    await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-09-07",
+      endDate: "2026-09-09",
+      reason: null,
+    });
+
+    await expect(
+      service.createOwnLeaveRequest(memberActor(), {
+        policyId: casualId,
+        startDate: "2026-09-09",
+        endDate: "2026-09-11",
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("allows a range that starts the day after an existing one ends", async () => {
+    // The 7th-9th request from the previous test is still there.
+    const created = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-09-10",
+      endDate: "2026-09-11",
+      reason: null,
+    });
+
+    expect(created.cost).toBe(2);
+  });
+
+  it("ignores a rejected request when checking for an overlap", async () => {
+    await clearRequests();
+
+    const first = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-09-07",
+      endDate: "2026-09-09",
+      reason: null,
+    });
+    await prisma.leaveRequest.update({
+      where: { id: first.id },
+      data: { status: "REJECTED" },
+    });
+
+    const second = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-09-07",
+      endDate: "2026-09-09",
+      reason: null,
+    });
+    expect(second.cost).toBe(3);
+  });
+
+  it("hides another organization's policy behind a 404", async () => {
+    await expect(
+      service.createOwnLeaveRequest(memberActor(), {
+        policyId: otherPolicyId,
+        startDate: "2026-10-05",
+        endDate: "2026-10-05",
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("refuses a retired policy the same way", async () => {
+    const retired = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: "Retired",
+        allowance: 5,
+        active: false,
+      },
+    });
+
+    await expect(
+      service.createOwnLeaveRequest(memberActor(), {
+        policyId: retired.id,
+        startDate: "2026-10-05",
+        endDate: "2026-10-05",
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    await prisma.leavePolicy.delete({ where: { id: retired.id } });
+  });
+
+  it("refuses a superadmin, who belongs to no organization", async () => {
+    await expect(
+      service.createOwnLeaveRequest(superActor(), {
+        policyId: casualId,
+        startDate: "2026-10-05",
+        endDate: "2026-10-05",
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("lets an admin file their own request", async () => {
+    await clearRequests();
+
+    const created = await service.createOwnLeaveRequest(adminActor(), {
+      policyId: casualId,
+      startDate: "2026-10-05",
+      endDate: "2026-10-05",
+      reason: null,
+    });
+
+    expect(created.cost).toBe(1);
+  });
+});
+
+describe("reading one's own requests", () => {
+  it("returns only the caller's own, newest first", async () => {
+    await clearRequests();
+
+    await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-09-07",
+      endDate: "2026-09-07",
+      reason: null,
+    });
+    await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-10-05",
+      endDate: "2026-10-05",
+      reason: null,
+    });
+    await service.createOwnLeaveRequest(adminActor(), {
+      policyId: casualId,
+      startDate: "2026-11-02",
+      endDate: "2026-11-02",
+      reason: null,
+    });
+
+    const mine = await service.listOwnLeaveRequests(memberActor());
+    expect(mine.map((r) => r.startDate)).toEqual(["2026-10-05", "2026-09-07"]);
+  });
+
+  it("returns null for a request that belongs to somebody else", async () => {
+    const theirs = await service.listOwnLeaveRequests(adminActor());
+    const found = await service.findOwnLeaveRequest(memberActor(), theirs[0].id);
+    expect(found).toBeNull();
   });
 });
