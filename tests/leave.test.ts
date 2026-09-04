@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import type { CreditRule } from "@/lib/leave";
 import {
+  accrualStart,
+  balanceAsOf,
   chargeYear,
   chargeableDays,
   costFrom,
+  creditedInYear,
   datesInRange,
   effectiveEndDate,
   offDates,
@@ -145,5 +149,228 @@ describe("unitNoun", () => {
 
   it("singularises a negative one — an over-drawn balance reads as -1 day", () => {
     expect(unitNoun("DAYS", -1)).toBe("day");
+  });
+});
+
+/* ------------------------------------------------------- the credit rules -- */
+
+/** Casual Leave: 6 days at once, pro-rated in a partial first year. */
+const CL: CreditRule = {
+  allowance: 6,
+  accrual: "UPFRONT",
+  prorated: true,
+  carry: false,
+  cap: null,
+  effectiveFrom: "2026-09-01",
+};
+
+/** Earned Leave: one day on the first of each month, banked up to 20. */
+const EL: CreditRule = {
+  allowance: 12,
+  accrual: "MONTHLY",
+  prorated: false,
+  carry: true,
+  cap: 20,
+  effectiveFrom: "2026-09-01",
+};
+
+/** Short leave: four uses a year, never pro-rated. */
+const SHORT: CreditRule = {
+  allowance: 4,
+  accrual: "UPFRONT",
+  prorated: false,
+  carry: false,
+  cap: null,
+  effectiveFrom: "2026-09-01",
+};
+
+const NO_USE: ReadonlyMap<number, number> = new Map();
+
+describe("accrualStart", () => {
+  it("uses the scheme start for somebody who was already here", () => {
+    // Employed since 2024; the scheme still begins when it begins.
+    expect(accrualStart(CL, "2024-02-03")).toBe("2026-09-01");
+  });
+
+  it("uses the scheme start for somebody who joined earlier the same year", () => {
+    expect(accrualStart(CL, "2026-07-02")).toBe("2026-09-01");
+  });
+
+  it("uses the join month for somebody who joins after the scheme starts", () => {
+    expect(accrualStart(CL, "2027-03-15")).toBe("2027-03-01");
+  });
+
+  it("falls back to the scheme start when no join date is recorded", () => {
+    // Every ADMIN today. They were here when the scheme began.
+    expect(accrualStart(CL, null)).toBe("2026-09-01");
+  });
+
+  it("takes the first of the join month, not the join day", () => {
+    expect(accrualStart(CL, "2027-03-31")).toBe("2027-03-01");
+  });
+});
+
+describe("creditedInYear — UPFRONT", () => {
+  it("pro-rates the scheme's first partial year down to two days", () => {
+    // September to December is four months: floor(6 x 4/12).
+    expect(creditedInYear(CL, "2026-07-02", 2026, "2026-09-04")).toBe(2);
+  });
+
+  it("credits the whole entitlement in the first full year", () => {
+    expect(creditedInYear(CL, "2026-07-02", 2027, "2027-01-01")).toBe(6);
+  });
+
+  it("credits nothing for a year that ended before the scheme started", () => {
+    expect(creditedInYear(CL, "2024-02-03", 2025, "2025-12-31")).toBe(0);
+  });
+
+  it("credits nothing before the credit date has actually passed", () => {
+    // 31 August is inside 2026, but the scheme starts the next day.
+    expect(creditedInYear(CL, "2026-07-02", 2026, "2026-08-31")).toBe(0);
+  });
+
+  it("credits on the credit date itself", () => {
+    expect(creditedInYear(CL, "2026-07-02", 2026, "2026-09-01")).toBe(2);
+  });
+
+  it("rounds a fractional share down rather than up", () => {
+    // A member joining in August has five months left: 6 x 5/12 is 2.5.
+    expect(creditedInYear(CL, "2027-08-10", 2027, "2027-12-31")).toBe(2);
+  });
+
+  it("does not pro-rate a policy that opted out", () => {
+    // Short leave is four uses whenever the year starts.
+    expect(creditedInYear(SHORT, "2026-07-02", 2026, "2026-09-04")).toBe(4);
+  });
+
+  it("pro-rates a late joiner in an ordinary year", () => {
+    // March onward is ten months: floor(6 x 10/12) = 5.
+    expect(creditedInYear(CL, "2027-03-15", 2027, "2027-12-31")).toBe(5);
+  });
+});
+
+describe("creditedInYear — MONTHLY", () => {
+  it("has credited exactly one day four days into the scheme", () => {
+    // The whole point of the change: EL reads 1 on 4 September, not 12.
+    expect(creditedInYear(EL, "2026-07-02", 2026, "2026-09-04")).toBe(1);
+  });
+
+  it("reaches four by the end of the scheme's first year", () => {
+    expect(creditedInYear(EL, "2026-07-02", 2026, "2026-12-31")).toBe(4);
+  });
+
+  it("counts a month from its first, not from the day asked about", () => {
+    // 1 October has passed, so October is credited in full.
+    expect(creditedInYear(EL, "2026-07-02", 2026, "2026-10-01")).toBe(2);
+  });
+
+  it("credits a full twelve across a whole year", () => {
+    expect(creditedInYear(EL, "2026-07-02", 2027, "2027-12-31")).toBe(12);
+  });
+
+  it("credits only the months elapsed so far in the current year", () => {
+    expect(creditedInYear(EL, "2026-07-02", 2027, "2027-06-15")).toBe(6);
+  });
+
+  it("credits nothing before the scheme starts", () => {
+    expect(creditedInYear(EL, "2026-07-02", 2026, "2026-08-31")).toBe(0);
+  });
+
+  it("counts from the join month for somebody who joins mid-year", () => {
+    // March to December inclusive is ten months.
+    expect(creditedInYear(EL, "2027-03-15", 2027, "2027-12-31")).toBe(10);
+  });
+});
+
+describe("balanceAsOf — policies that lapse", () => {
+  it("is the credit less what has been spent this year", () => {
+    const used = new Map([[2026, 2]]);
+    expect(balanceAsOf(CL, "2026-07-02", "2026-09-04", used)).toEqual({
+      credited: 2,
+      used: 2,
+      balance: 0,
+    });
+  });
+
+  it("goes negative when more was filed than credited", () => {
+    // Over-balance requests are filed, not refused, so this is reachable.
+    const used = new Map([[2026, 5]]);
+    expect(balanceAsOf(CL, "2026-07-02", "2026-09-04", used).balance).toBe(-3);
+  });
+
+  it("does not carry last year's unused days into this one", () => {
+    // 2026 credited 2 and spent nothing; 2027 still opens at its own 6.
+    const used = new Map([[2026, 0]]);
+    expect(balanceAsOf(CL, "2026-07-02", "2027-01-01", used)).toEqual({
+      credited: 6,
+      used: 0,
+      balance: 6,
+    });
+  });
+});
+
+describe("balanceAsOf — policies that carry", () => {
+  it("carries an unused closing balance into the next year", () => {
+    // 2026 closes at 4; 1 January 2027 credits one more.
+    expect(balanceAsOf(EL, "2026-07-02", "2027-01-15", NO_USE)).toEqual({
+      credited: 5,
+      used: 0,
+      balance: 5,
+    });
+  });
+
+  it("carries a closing balance net of what was spent", () => {
+    const used = new Map([[2026, 3]]);
+    // 2026: credited 4, used 3, closes at 1. 2027 adds January.
+    expect(balanceAsOf(EL, "2026-07-02", "2027-01-15", used).balance).toBe(2);
+  });
+
+  it("applies the cap at the year boundary", () => {
+    const banked: CreditRule = { ...EL, effectiveFrom: "2024-01-01" };
+    // 2024 closes 12, 2025 would close 24 but carries 20, 2026 adds January.
+    expect(balanceAsOf(banked, null, "2026-01-15", NO_USE).balance).toBe(21);
+  });
+
+  it("lets a balance exceed the cap within a year", () => {
+    const banked: CreditRule = { ...EL, effectiveFrom: "2024-01-01" };
+    // Opening 20 plus a full 12 accrued, with nothing spent, reaches 32.
+    expect(balanceAsOf(banked, null, "2026-12-31", NO_USE).balance).toBe(32);
+  });
+
+  it("does not hand back days the cap already discarded", () => {
+    // THE REGRESSION. Credited 36 across three years, spent 10, cap 20.
+    // Capping continuously computes min(20, 36 - 10) = 20 — the member
+    // spends ten days and their balance does not move, because the days the
+    // cap threw away flow back in to replace them. Capping at the boundary
+    // gives 20 opening + 12 accrued - 10 spent = 22.
+    const banked: CreditRule = { ...EL, effectiveFrom: "2024-01-01" };
+    const used = new Map([[2026, 10]]);
+    expect(balanceAsOf(banked, null, "2026-12-31", used).balance).toBe(22);
+  });
+
+  it("carries an overdrawn balance forward as a debt", () => {
+    const used = new Map([[2026, 6]]);
+    // 2026: credited 4, used 6, closes at -2. 2027 adds January.
+    expect(balanceAsOf(EL, "2026-07-02", "2027-01-15", used).balance).toBe(-1);
+  });
+
+  it("reports this year's usage, not the running total", () => {
+    const used = new Map([
+      [2026, 3],
+      [2027, 1],
+    ]);
+    const result = balanceAsOf(EL, "2026-07-02", "2027-01-15", used);
+    expect(result.used).toBe(1);
+    // Opening 1 (4 credited less 3 spent) plus January's day, less this
+    // year's one day spent.
+    expect(result.balance).toBe(1);
+  });
+
+  it("is empty before accrual has started at all", () => {
+    expect(balanceAsOf(EL, "2027-03-15", "2026-12-31", NO_USE)).toEqual({
+      credited: 0,
+      used: 0,
+      balance: 0,
+    });
   });
 });
