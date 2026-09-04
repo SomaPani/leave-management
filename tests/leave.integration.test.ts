@@ -24,6 +24,8 @@ vi.mock("@/lib/auth", () => ({
 
 const { prisma } = await import("@/lib/prisma");
 const service = await import("@/lib/leave-service");
+const policyRoute = await import("@/app/api/leave-policies/route");
+const requestRoute = await import("@/app/api/leave-requests/route");
 
 const RUN = `lv-${Date.now().toString(36)}`;
 const email = (local: string) => `${RUN}-${local}@example.test`;
@@ -616,5 +618,180 @@ describe("reading one's own requests", () => {
     const theirs = await service.listOwnLeaveRequests(adminActor());
     const found = await service.findOwnLeaveRequest(memberActor(), theirs[0].id);
     expect(found).toBeNull();
+  });
+});
+
+function post(body: unknown): Request {
+  return new Request("http://localhost/api/leave-requests", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("GET /api/leave-policies", () => {
+  it("answers a member with their organization's policies", async () => {
+    actorRef.current = memberActor();
+
+    const response = await policyRoute.GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.map((p: { name: string }) => p.name)).toEqual([
+      "Casual",
+      "Short leave",
+    ]);
+  });
+
+  it("answers 401 when nobody is signed in", async () => {
+    actorRef.current = null;
+    expect((await policyRoute.GET()).status).toBe(401);
+  });
+
+  it("answers 403 for a superadmin", async () => {
+    actorRef.current = superActor();
+    expect((await policyRoute.GET()).status).toBe(403);
+  });
+});
+
+describe("POST /api/leave-requests", () => {
+  it("creates a request and answers 201", async () => {
+    await clearRequests();
+    await clearHolidays();
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(
+      post({
+        policyId: casualId,
+        startDate: "2026-09-07",
+        endDate: "2026-09-09",
+        reason: "Family thing",
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({ cost: 3, status: "PENDING" });
+  });
+
+  it("defaults a missing endDate to the start date", async () => {
+    await clearRequests();
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(
+      post({ policyId: casualId, startDate: "2026-09-07" }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({ startDate: "2026-09-07", endDate: "2026-09-07" });
+  });
+
+  it("treats an empty endDate the same way — a disabled input submits nothing", async () => {
+    await clearRequests();
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(
+      post({ policyId: casualId, startDate: "2026-09-07", endDate: "" }),
+    );
+
+    expect(response.status).toBe(201);
+  });
+
+  it("answers 400 for a reversed range", async () => {
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(
+      post({ policyId: casualId, startDate: "2026-09-09", endDate: "2026-09-07" }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toMatch(/earlier than/);
+  });
+
+  it("answers 400 for a date that does not exist", async () => {
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(
+      post({ policyId: casualId, startDate: "2026-02-30" }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("answers 400 for a missing policyId", async () => {
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(post({ startDate: "2026-09-07" }));
+
+    expect(response.status).toBe(400);
+  });
+
+  it("answers 400 for a reason longer than the column expects", async () => {
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(
+      post({
+        policyId: casualId,
+        startDate: "2026-10-05",
+        reason: "x".repeat(501),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("answers 409 for an overlap", async () => {
+    await clearRequests();
+    actorRef.current = memberActor();
+
+    await requestRoute.POST(
+      post({ policyId: casualId, startDate: "2026-09-07", endDate: "2026-09-09" }),
+    );
+    const response = await requestRoute.POST(
+      post({ policyId: casualId, startDate: "2026-09-08", endDate: "2026-09-10" }),
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  it("answers 404 for another organization's policy", async () => {
+    actorRef.current = memberActor();
+
+    const response = await requestRoute.POST(
+      post({ policyId: otherPolicyId, startDate: "2026-10-05" }),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("answers 401 when nobody is signed in", async () => {
+    actorRef.current = null;
+
+    const response = await requestRoute.POST(
+      post({ policyId: casualId, startDate: "2026-10-05" }),
+    );
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("GET /api/leave-requests", () => {
+  it("answers with the caller's own requests only", async () => {
+    await clearRequests();
+
+    actorRef.current = adminActor();
+    await requestRoute.POST(post({ policyId: casualId, startDate: "2026-11-02" }));
+
+    actorRef.current = memberActor();
+    await requestRoute.POST(post({ policyId: casualId, startDate: "2026-10-05" }));
+
+    const response = await requestRoute.GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject({ startDate: "2026-10-05" });
   });
 });
