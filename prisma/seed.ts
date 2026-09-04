@@ -266,6 +266,74 @@ async function seedHolidays(
   return created;
 }
 
+/**
+ * The leave entitlements granted to the seeded organization.
+ *
+ * These are the four the fixture in lib/seed.ts hardcoded, now owned by an
+ * organization that can change them. Idempotent by (organizationId, name) —
+ * the unique index — so re-running the seed adds nothing and, importantly,
+ * does not reset an allowance an admin has since edited.
+ */
+const SEED_LEAVE_POLICIES: {
+  name: string;
+  note: string;
+  allowance: number;
+  unit?: "USES";
+  carry?: boolean;
+}[] = [
+  {
+    name: "Casual",
+    note: "Short personal breaks, applied at least a day ahead.",
+    allowance: 6,
+  },
+  {
+    name: "Sick",
+    note: "No notice needed. Doctor's note past three days.",
+    allowance: 6,
+  },
+  {
+    name: "Paid / annual",
+    note: "Accrues monthly. Two weeks' notice for 5+ days.",
+    allowance: 18,
+    carry: true,
+  },
+  {
+    name: "Short leave",
+    note: "A couple of hours off. Counted per use, not per day.",
+    allowance: 4,
+    unit: "USES",
+  },
+];
+
+async function seedLeavePolicies(organizationId: string): Promise<number> {
+  const existing = await prisma.leavePolicy.findMany({
+    where: { organizationId },
+    select: { name: true },
+  });
+  const seen = new Set(existing.map((policy) => policy.name));
+
+  let created = 0;
+  for (const [position, policy] of SEED_LEAVE_POLICIES.entries()) {
+    if (seen.has(policy.name)) continue;
+
+    await prisma.leavePolicy.create({
+      data: {
+        organizationId,
+        name: policy.name,
+        note: policy.note,
+        allowance: policy.allowance,
+        unit: policy.unit ?? "DAYS",
+        carry: policy.carry ?? false,
+        // The array's order is the select's order.
+        position,
+      },
+    });
+    created++;
+  }
+
+  return created;
+}
+
 async function main(): Promise<void> {
   const orgName = required("STACX_ORG_NAME");
   const adminName = required("STACX_ADMIN_NAME");
@@ -356,6 +424,7 @@ async function main(): Promise<void> {
 
   const attendanceRows = await seedAttendance(seeded.organization.id, seeded.admin.id);
   const holidayRows = await seedHolidays(seeded.organization.id, seeded.regions);
+  const policyRows = await seedLeavePolicies(seeded.organization.id);
 
   console.log(
     `Seeded organization "${seeded.organization.name}" (${seeded.organization.id}) with admin ${seeded.admin.email}`,
@@ -379,6 +448,7 @@ async function main(): Promise<void> {
   );
 
   console.log(`Holidays: ${holidayRows} added for 2026.`);
+  console.log(`Leave policies: ${policyRows} added.`);
 }
 
 main()
