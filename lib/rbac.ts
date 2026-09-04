@@ -158,6 +158,38 @@ export function canListHolidays(actor: Actor): boolean {
   );
 }
 
+/**
+ * Leave policies are an organization's own entitlements, so unlike
+ * `canListHolidays` this excludes a SUPERADMIN: they belong to no
+ * organization, and answering them with an empty list would misreport "your
+ * organization grants nothing" as though it were a fact about somebody.
+ */
+export function canListLeavePolicies(actor: Actor): boolean {
+  return (
+    (actor.role === Role.ADMIN || actor.role === Role.MEMBER) &&
+    actor.organizationId !== null
+  );
+}
+
+/**
+ * Applying is self-service: the applicant is always the caller, so there is no
+ * target to compare against and no id to tamper with.
+ *
+ * ADMIN is allowed deliberately — an admin is a person who takes leave, and
+ * the API should not pretend otherwise. `/apply` itself stays MEMBER-only
+ * because app/(member)/layout.tsx gates the whole group; the day an admin
+ * needs the screen, that gate is what changes, not this predicate.
+ *
+ * Written out rather than delegating to `canListLeavePolicies`, whose rule it
+ * currently matches by coincidence and not by definition.
+ */
+export function canApplyForLeave(actor: Actor): boolean {
+  return (
+    (actor.role === Role.ADMIN || actor.role === Role.MEMBER) &&
+    actor.organizationId !== null
+  );
+}
+
 export function canListOrganizations(actor: Actor): boolean {
   return actor.role === Role.SUPERADMIN;
 }

@@ -5,6 +5,7 @@ import {
   type Actor,
   HttpError,
   assertOrgInvariant,
+  canApplyForLeave,
   canCreateAdmin,
   canCreateMember,
   canCreateOrganization,
@@ -13,6 +14,7 @@ import {
   canDeleteOrganization,
   canListAttendance,
   canListHolidays,
+  canListLeavePolicies,
   canListMembers,
   canListOrganizations,
   canListRegions,
@@ -323,5 +325,34 @@ describe("who can read one person's attendance", () => {
   it("denies reading somebody else's, even inside one organization", () => {
     expect(canReadOwnAttendance(memberA, "m2")).toBe(false);
     expect(canReadOwnAttendance(adminA, memberA.id)).toBe(false);
+  });
+});
+
+describe("who can read leave policies", () => {
+  it("allows a member and an admin inside an organization", () => {
+    expect(canListLeavePolicies(memberA)).toBe(true);
+    expect(canListLeavePolicies(adminA)).toBe(true);
+  });
+
+  it("denies a superadmin, who belongs to no organization to have policies in", () => {
+    expect(canListLeavePolicies(superadmin)).toBe(false);
+  });
+});
+
+describe("who can apply for leave", () => {
+  it("allows a member", () => {
+    expect(canApplyForLeave(memberA)).toBe(true);
+  });
+
+  it("allows an admin — admins take leave too", () => {
+    expect(canApplyForLeave(adminA)).toBe(true);
+  });
+
+  it("denies a superadmin", () => {
+    expect(canApplyForLeave(superadmin)).toBe(false);
+  });
+
+  it("denies an org-bound role whose organization is somehow missing", () => {
+    expect(canApplyForLeave({ ...memberA, organizationId: null })).toBe(false);
   });
 });
