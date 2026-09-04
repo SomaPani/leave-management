@@ -4,10 +4,9 @@ import { refresh } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { TODAY, formatShort, isValidDate, workdays } from "@/lib/date";
+import { TODAY, formatShort, isValidDate } from "@/lib/date";
 import {
   initialsFor,
-  isShortLeave,
   onApprovedLeave,
   requestDays,
   roster,
@@ -23,7 +22,6 @@ import {
 import { mutateDb, readDb } from "@/lib/store";
 import type {
   AttendanceCode,
-  LeaveRequest,
   Person,
   RequestStatus,
   WorkMode,
@@ -155,44 +153,6 @@ async function appendMessage(
     const request = db.requests.find((r) => r.id === requestId);
     request?.thread.push({ by, text: body, at: formatShort(TODAY) });
   });
-}
-
-export async function submitLeaveRequest(form: FormData): Promise<void> {
-  const user = await requireUser();
-  if (user.role === "admin") return;
-
-  const type = text(form, "type");
-  const from = text(form, "from");
-  const short = isShortLeave(type);
-  const to = short ? from : text(form, "to");
-  const reason = text(form, "reason");
-
-  const db = await readDb();
-  const knownType = db.policies.some((p) => p.name === type);
-  if (!knownType || !isValidDate(from) || !isValidDate(to)) {
-    redirect("/apply?error=invalid");
-  }
-  if (!short && workdays(from, to) === 0) {
-    redirect("/apply?error=range");
-  }
-
-  const id = `req_${Date.now().toString(36)}`;
-  const request: LeaveRequest = {
-    id,
-    userId: user.id,
-    type,
-    from,
-    to,
-    reason: reason || "—",
-    status: "pending",
-    thread: [],
-  };
-
-  await mutateDb((current) => {
-    current.requests.unshift(request);
-  });
-
-  redirect(`/requests?r=${id}`);
 }
 
 /* ------------------------------------------------------------ attendance -- */

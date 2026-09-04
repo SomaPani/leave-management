@@ -11,7 +11,6 @@ const MESSAGES: Record<string, string> = {
   policy: "the policy change was not saved.",
   wfh: "the work-from-home policy change was not saved.",
   rule: "the approval rule was not saved.",
-  apply: "the leave request was not submitted.",
   reply: "the reply was not saved.",
   upload: "the document was not uploaded.",
   remove: "the document was not removed.",

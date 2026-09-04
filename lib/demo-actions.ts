@@ -12,8 +12,9 @@ import { redirect } from "next/navigation";
  * silent no-op, which reads as a broken button.
  *
  * Attendance has left: it is backed by `orgapp.Attendance` and writes through
- * lib/attendance-actions.ts. Team left before it. The rest go the same way —
- * each needs a real data source first, not a different action.
+ * lib/attendance-actions.ts. Team left before it, then the holiday calendar,
+ * and now Apply — see lib/leave-actions.ts. The rest go the same way: each
+ * needs a real data source first, not a different action.
  */
 
 function text(form: FormData, key: string): string {
@@ -38,10 +39,6 @@ export async function demoAddTeamMember(): Promise<void> {
 }
 
 /* --------------------------------------------------------------- member -- */
-
-export async function demoSubmitLeaveRequest(): Promise<void> {
-  redirect("/apply?demo=apply");
-}
 
 export async function demoUpdateOwnRequest(form: FormData): Promise<void> {
   const requestId = text(form, "requestId");
