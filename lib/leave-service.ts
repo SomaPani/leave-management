@@ -2,6 +2,7 @@
 // one plain import gives both the values and the type.
 import {
   EmploymentStatus,
+  type LeaveAccrual,
   LeaveRequestStatus,
   type LeaveUnit,
   Role,
@@ -9,7 +10,9 @@ import {
 import { fromDbDate, toDbDate, todayIso } from "@/lib/attendance";
 import { listHolidays } from "@/lib/holiday-service";
 import {
+  type LeaveAccrualName,
   type LeaveUnitName,
+  balanceAsOf,
   chargeYear,
   costFrom,
   effectiveEndDate,
@@ -43,6 +46,9 @@ const SPENT: LeaveRequestStatus[] = [
   LeaveRequestStatus.APPROVED,
 ];
 
+/** Shared empty map, so a policy with no history allocates nothing. */
+const NO_USAGE: ReadonlyMap<number, number> = new Map();
+
 const POLICY_FIELDS = {
   id: true,
   name: true,
@@ -50,6 +56,10 @@ const POLICY_FIELDS = {
   allowance: true,
   unit: true,
   carry: true,
+  accrual: true,
+  prorated: true,
+  cap: true,
+  effectiveFrom: true,
 } as const;
 
 const REQUEST_FIELDS = {
@@ -64,6 +74,13 @@ const REQUEST_FIELDS = {
   approver: { select: { id: true, name: true } },
 } as const;
 
+/**
+ * A policy as the rest of the app sees it.
+ *
+ * This shape deliberately satisfies `CreditRule` in lib/leave.ts — allowance,
+ * accrual, prorated, carry, cap and effectiveFrom — so it can be handed
+ * straight to `balanceAsOf` with no adapter to keep in step.
+ */
 export type LeavePolicyRecord = {
   id: string;
   name: string;
@@ -71,19 +88,32 @@ export type LeavePolicyRecord = {
   allowance: number;
   unit: LeaveUnitName;
   carry: boolean;
+  accrual: LeaveAccrualName;
+  prorated: boolean;
+  cap: number | null;
+  /** `YYYY-MM-DD`. */
+  effectiveFrom: string;
 };
 
 export type LeaveBalanceRecord = LeavePolicyRecord & {
-  /** Days (or uses) already spent this year on PENDING and APPROVED requests. */
+  /** How much of the entitlement has actually been credited by `asOf`. */
+  credited: number;
+  /** Days (or uses) spent in the calendar year `asOf` falls in. */
   used: number;
-  /** May go negative: an over-balance request is filed, not refused. */
+  /**
+   * May exceed `cap` within a year, and may go negative: an over-balance
+   * request is filed rather than refused.
+   */
   balance: number;
 };
 
 export type ApproverRecord = { id: string; name: string } | null;
 
 export type LeaveSummary = {
+  /** The calendar year `asOf` falls in. */
   year: number;
+  /** The date these balances were computed against, `YYYY-MM-DD`. */
+  asOf: string;
   balances: LeaveBalanceRecord[];
   approver: ApproverRecord;
 };
@@ -130,6 +160,14 @@ function unitName(unit: LeaveUnit): LeaveUnitName {
   return unit;
 }
 
+/**
+ * The schema's enum as the client-safe union lib/leave.ts speaks — the same
+ * trick, and the same reason, as `unitName` above.
+ */
+function accrualName(accrual: LeaveAccrual): LeaveAccrualName {
+  return accrual;
+}
+
 function toRecord(row: RequestRow): LeaveRequestRecord {
   return {
     id: row.id,
@@ -151,11 +189,6 @@ function applicantOrgFor(actor: Actor): string {
     throw new HttpError(403, "Only a member of an organization can apply for leave.");
   }
   return organizationId;
-}
-
-/** The DATE bounds of one calendar year. */
-function yearWindow(year: number): { gte: Date; lte: Date } {
-  return { gte: toDbDate(`${year}-01-01`), lte: toDbDate(`${year}-12-31`) };
 }
 
 /**
@@ -192,53 +225,79 @@ export async function listLeavePolicies(actor: Actor): Promise<LeavePolicyRecord
     orderBy: [{ position: "asc" }, { name: "asc" }],
   });
 
-  return rows.map((row) => ({ ...row, unit: unitName(row.unit) }));
+  return rows.map((row) => ({
+    ...row,
+    unit: unitName(row.unit),
+    accrual: accrualName(row.accrual),
+    effectiveFrom: fromDbDate(row.effectiveFrom),
+  }));
 }
 
 /**
  * Every policy with what this member has left of it, plus who their requests
  * go to — one call, because the Apply screen needs all of it at once.
  *
- * The balance is derived rather than stored: allowance minus the cost of the
- * requests that have already spent it. PENDING counts alongside APPROVED, or
- * a member could file the same six days three times before anyone looked at
- * the first one. Withdrawn and rejected requests free their days by falling
- * out of the filter, which is the whole reason there is no ledger to reconcile.
+ * The balance is derived rather than stored, and now respects a credit
+ * schedule: an EL day exists once its month has begun, so this answers 1 on
+ * 4 September and 4 on 31 December for the same year. All of that arithmetic
+ * is in lib/leave.ts; this function's job is to fetch what it needs.
+ *
+ * PENDING counts alongside APPROVED, or a member could file the same six days
+ * three times before anyone looked at the first one. Withdrawn and rejected
+ * requests free their days by falling out of the filter, which is the whole
+ * reason there is no ledger to reconcile.
+ *
+ * `asOf` is a parameter rather than always `todayIso()` so the schedule can be
+ * tested at a chosen date without touching the clock.
  */
 export async function listOwnLeaveSummary(
   actor: Actor,
-  year: number = chargeYear(todayIso()),
+  asOf: string = todayIso(),
 ): Promise<LeaveSummary> {
   const organizationId = applicantOrgFor(actor);
 
   const applicant = await prisma.user.findUnique({
     where: { id: actor.id },
-    select: { manager: { select: { id: true, name: true } } },
+    select: {
+      joinedOn: true,
+      manager: { select: { id: true, name: true } },
+    },
   });
   if (!applicant) throw new HttpError(401, "Your account no longer exists.");
 
   const [policies, spent, approver] = await Promise.all([
     listLeavePolicies(actor),
-    prisma.leaveRequest.groupBy({
-      by: ["policyId"],
-      where: {
-        userId: actor.id,
-        status: { in: SPENT },
-        startDate: yearWindow(year),
-      },
-      _sum: { cost: true },
+    // Every spent request, not one year's. A carrying policy needs each year's
+    // usage from its accrual start, because the cap is applied at every year
+    // boundary and cannot be collapsed into one subtraction. This is a single
+    // person's leave history, so it stays small.
+    prisma.leaveRequest.findMany({
+      where: { userId: actor.id, status: { in: SPENT } },
+      select: { policyId: true, startDate: true, cost: true },
     }),
     approverFor(applicant.manager, organizationId),
   ]);
 
-  const usedByPolicy = new Map(spent.map((row) => [row.policyId, row._sum.cost ?? 0]));
+  // policy id -> calendar year -> days spent.
+  const usedByPolicy = new Map<string, Map<number, number>>();
+  for (const row of spent) {
+    const year = chargeYear(fromDbDate(row.startDate));
+    const byYear = usedByPolicy.get(row.policyId) ?? new Map<number, number>();
+    byYear.set(year, (byYear.get(year) ?? 0) + row.cost);
+    usedByPolicy.set(row.policyId, byYear);
+  }
+
+  // `joinedOn` is a timestamp rather than a DATE column, but everything that
+  // writes it stores UTC midnight, so the slice is exact.
+  const joinedOn = applicant.joinedOn ? fromDbDate(applicant.joinedOn) : null;
 
   return {
-    year,
-    balances: policies.map((policy) => {
-      const used = usedByPolicy.get(policy.id) ?? 0;
-      return { ...policy, used, balance: policy.allowance - used };
-    }),
+    year: chargeYear(asOf),
+    asOf,
+    balances: policies.map((policy) => ({
+      ...policy,
+      ...balanceAsOf(policy, joinedOn, asOf, usedByPolicy.get(policy.id) ?? NO_USAGE),
+    })),
     approver,
   };
 }

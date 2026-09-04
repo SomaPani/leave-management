@@ -360,7 +360,7 @@ describe("listing leave policies", () => {
 describe("the member's own leave summary", () => {
   it("starts every balance at the full allowance", async () => {
     await clearRequests();
-    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
 
     expect(summary.year).toBe(2026);
     expect(summary.balances).toEqual([
@@ -370,7 +370,7 @@ describe("the member's own leave summary", () => {
   });
 
   it("routes to the applicant's manager", async () => {
-    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
     expect(summary.approver).toEqual({ id: managerId, name: "Run Manager" });
   });
 
@@ -378,7 +378,7 @@ describe("the member's own leave summary", () => {
     // The manager has none of their own.
     const summary = await service.listOwnLeaveSummary(
       { id: managerId, role: Role.MEMBER, organizationId: orgId },
-      2026,
+      "2026-12-31",
     );
     expect(summary.approver).toEqual({ id: adminId, name: "Run Admin" });
   });
@@ -395,7 +395,7 @@ describe("the member's own leave summary", () => {
       reason: null,
     });
 
-    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
     expect(summary.balances[0]).toMatchObject({ used: 3, balance: 3 });
   });
 
@@ -405,7 +405,7 @@ describe("the member's own leave summary", () => {
       data: { status: "WITHDRAWN" },
     });
 
-    const summary = await service.listOwnLeaveSummary(memberActor(), 2026);
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
     expect(summary.balances[0]).toMatchObject({ used: 0, balance: 6 });
   });
 
@@ -420,8 +420,8 @@ describe("the member's own leave summary", () => {
       reason: null,
     });
 
-    const in2026 = await service.listOwnLeaveSummary(memberActor(), 2026);
-    const in2027 = await service.listOwnLeaveSummary(memberActor(), 2027);
+    const in2026 = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
+    const in2027 = await service.listOwnLeaveSummary(memberActor(), "2027-12-31");
 
     expect(in2026.balances[0].used).toBe(2);
     expect(in2027.balances[0].used).toBe(0);
@@ -872,5 +872,158 @@ describe("GET /api/leave-requests", () => {
     expect(response.status).toBe(200);
     expect(body).toHaveLength(1);
     expect(body[0]).toMatchObject({ startDate: "2026-10-05" });
+  });
+});
+
+describe("balances on a credit schedule", () => {
+  let clId = "";
+  let elId = "";
+
+  /** One policy's row out of a summary, by name. */
+  function policyIn(
+    summary: {
+      balances: { name: string; credited: number; used: number; balance: number }[];
+    },
+    name: string,
+  ): { credited: number; used: number; balance: number } {
+    const row = summary.balances.find((balance) => balance.name === name);
+    if (!row) throw new Error(`No policy named ${name} in the summary.`);
+    return row;
+  }
+
+  beforeAll(async () => {
+    const cl = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: "Scheme CL",
+        allowance: 6,
+        prorated: true,
+        position: 10,
+        effectiveFrom: new Date("2026-09-01"),
+      },
+    });
+    clId = cl.id;
+
+    const el = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: "Scheme EL",
+        allowance: 12,
+        accrual: "MONTHLY",
+        carry: true,
+        cap: 20,
+        position: 11,
+        effectiveFrom: new Date("2026-09-01"),
+      },
+    });
+    elId = el.id;
+
+    // The member joined two months before the scheme; the manager two years.
+    await prisma.user.update({
+      where: { id: memberId },
+      data: { joinedOn: new Date("2026-07-02") },
+    });
+    await prisma.user.update({
+      where: { id: managerId },
+      data: { joinedOn: new Date("2024-02-03") },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.leaveRequest.deleteMany({
+      where: { policyId: { in: [clId, elId] } },
+    });
+    await prisma.leavePolicy.deleteMany({ where: { id: { in: [clId, elId] } } });
+    await prisma.user.update({
+      where: { id: memberId },
+      data: { joinedOn: null },
+    });
+    await prisma.user.update({
+      where: { id: managerId },
+      data: { joinedOn: null },
+    });
+  });
+
+  it("credits CL two days and EL one on the fourth of September", async () => {
+    await clearRequests();
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-09-04");
+
+    expect(summary.asOf).toBe("2026-09-04");
+    expect(summary.year).toBe(2026);
+    // The whole point of the change: EL reads 1, not 12.
+    expect(policyIn(summary, "Scheme CL")).toMatchObject({ credited: 2, balance: 2 });
+    expect(policyIn(summary, "Scheme EL")).toMatchObject({ credited: 1, balance: 1 });
+  });
+
+  it("has credited EL four days by the end of the scheme's first year", async () => {
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
+    expect(policyIn(summary, "Scheme EL")).toMatchObject({ credited: 4, balance: 4 });
+  });
+
+  it("credits nothing before the scheme starts", async () => {
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-08-31");
+    expect(policyIn(summary, "Scheme CL")).toMatchObject({ credited: 0, balance: 0 });
+    expect(policyIn(summary, "Scheme EL")).toMatchObject({ credited: 0, balance: 0 });
+  });
+
+  it("gives a member employed since 2024 the same four-month year", async () => {
+    // Tenure does not buy a bigger 2026: the scheme start governs.
+    const summary = await service.listOwnLeaveSummary(
+      { id: managerId, role: Role.MEMBER, organizationId: orgId },
+      "2026-09-04",
+    );
+    expect(policyIn(summary, "Scheme CL")).toMatchObject({ credited: 2 });
+    expect(policyIn(summary, "Scheme EL")).toMatchObject({ credited: 1 });
+  });
+
+  it("counts a filed request against the credited amount", async () => {
+    await clearRequests();
+    await service.createOwnLeaveRequest(memberActor(), {
+      policyId: clId,
+      startDate: "2026-09-07",
+      endDate: "2026-09-08",
+      reason: null,
+    });
+
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-09-09");
+    expect(policyIn(summary, "Scheme CL")).toMatchObject({
+      credited: 2,
+      used: 2,
+      balance: 0,
+    });
+  });
+
+  it("carries EL into the next year, net of what was spent", async () => {
+    await clearRequests();
+    await prisma.leaveRequest.create({
+      data: {
+        organizationId: orgId,
+        userId: memberId,
+        policyId: elId,
+        startDate: new Date("2026-12-07"),
+        endDate: new Date("2026-12-07"),
+        cost: 1,
+      },
+    });
+
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2027-01-15");
+    // 2026 closed at 4 credited less 1 spent; January 2027 adds one more.
+    expect(policyIn(summary, "Scheme EL")).toMatchObject({
+      credited: 4,
+      used: 0,
+      balance: 4,
+    });
+  });
+
+  it("lapses CL at the year boundary", async () => {
+    // The same read as above: 2026's unused CL is gone, 2027 opens at six.
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2027-01-15");
+    expect(policyIn(summary, "Scheme CL")).toMatchObject({ credited: 6, balance: 6 });
+  });
+
+  it("defaults to today when no date is given", async () => {
+    await clearRequests();
+    const summary = await service.listOwnLeaveSummary(memberActor());
+    expect(summary.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
