@@ -1541,7 +1541,7 @@ git commit -m "Approve, reject and withdraw a leave request for real"
 - Consumes: `listLeaveRequests`, `findLeaveRequest`, `countPendingLeaveRequests`, `leaveSummaryFor` (Task 3); `reviewLeaveRequestAction` (Task 4).
 - Produces: `STATUS_STYLE` re-keyed to `LeaveRequestStatus`; `StatusBadge({ status: LeaveRequestStatus })`. Task 6 renders the same badge.
 
-- [ ] **Step 1: Re-key `STATUS_STYLE`** — and add a legacy twin for `/requests`
+- [x] **Step 1: Re-key `STATUS_STYLE`** — and add a legacy twin for `/requests`
 
 > Re-keying alone breaks `app/(member)/requests/page.tsx`, which is still on the
 > fixture's lowercase `RequestStatus` until Task 6, so `tsc` and `npm run build`
@@ -1593,7 +1593,7 @@ export function StatusBadge({ status }: { status: LeaveRequestStatus }) {
 
 with `import { LeaveRequestStatus } from "@/generated/prisma/enums";` and the `RequestStatus` import removed if now unused.
 
-- [ ] **Step 2: Check what else that breaks**
+- [x] **Step 2: Check what else that breaks**
 
 ```bash
 npx tsc --noEmit
@@ -1601,7 +1601,7 @@ npx tsc --noEmit
 
 Expected: errors only in `app/(leave)/approvals/page.tsx` and `app/(member)/requests/page.tsx` — the two files this task and Task 6 rewrite. **An error anywhere else means another fixture screen renders a `StatusBadge`; leave that screen alone and keep `LEGACY_STATUS_STYLE` for it rather than changing what it shows.**
 
-- [ ] **Step 3: Rewrite the page's data layer**
+- [x] **Step 3: Rewrite the page's data layer**
 
 In `app/(leave)/approvals/page.tsx`, replace the imports and the top of the component. The filter keys become database statuses; `all` stays a sentinel meaning no filter:
 
@@ -1658,7 +1658,7 @@ The body:
     : null;
 ```
 
-- [ ] **Step 4: Rewrite the list rows**
+- [x] **Step 4: Rewrite the list rows**
 
 Inside the `queue.map`, replace the fixture lookups:
 
@@ -1690,7 +1690,7 @@ Inside the `queue.map`, replace the fixture lookups:
 
 `unitNoun` is used rather than `dayCountLabel` because a `USES` policy is counted in occurrences, not days — the distinction `/apply` already draws.
 
-- [ ] **Step 5: Rewrite the detail panel**
+- [x] **Step 5: Rewrite the detail panel**
 
 **Branch on three states, not two.** `status` has four members and only
 `PENDING` gets the form, so the else-branch catches `APPROVED`, `REJECTED`
@@ -1826,7 +1826,7 @@ Add the `?error=` strip below `<PageHeader>`, matching `/apply`:
 
 and widen the props type to `{ filter?: string; r?: string; error?: string }`.
 
-- [ ] **Step 6: Make the sidebar badge real**
+- [x] **Step 6: Make the sidebar badge real**
 
 In `app/(leave)/layout.tsx`, replace `const pending = pendingRequests(seedDb()).length;` with:
 
@@ -1836,7 +1836,7 @@ In `app/(leave)/layout.tsx`, replace `const pending = pendingRequests(seedDb()).
 
 Import `countPendingLeaveRequests` from `@/lib/leave-review-service`, drop the `pendingRequests` import from `@/lib/domain`, and keep `COMPANY_NAME` from `@/lib/seed` — it is the only thing that file still supplies here.
 
-- [ ] **Step 7: Verify by hand**
+- [x] **Step 7: Verify by hand**
 
 ```bash
 docker compose up -d
@@ -1851,7 +1851,7 @@ Sign in as a member, file a request at `/apply`, sign out, sign in as an admin o
 4. Rejecting with an empty note comes back with **"A rejection needs a reason."** in the error strip.
 5. Rejecting with a note succeeds, and the member's balance on `/apply` returns to what it was before they filed.
 
-- [ ] **Step 8: Check types and lint**
+- [x] **Step 8: Check types and lint**
 
 ```bash
 npx tsc --noEmit && npm run lint && npm test
@@ -1859,7 +1859,7 @@ npx tsc --noEmit && npm run lint && npm test
 
 Expected: all clean.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add lib/ui.ts components/ui.tsx "app/(leave)/approvals/page.tsx" "app/(leave)/layout.tsx"
