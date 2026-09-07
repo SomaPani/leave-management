@@ -2,10 +2,10 @@ import { Role } from "@/generated/prisma/enums";
 import { SidebarNav, type NavItem } from "@/components/sidebar-nav";
 import { Avatar } from "@/components/ui";
 import { auth } from "@/lib/auth";
-import { pendingRequests } from "@/lib/domain";
 import { signOutAction } from "@/lib/org-actions";
+import { countPendingLeaveRequests } from "@/lib/leave-review-service";
 import { requirePageRole } from "@/lib/page-guards";
-import { COMPANY_NAME, seedDb } from "@/lib/seed";
+import { COMPANY_NAME } from "@/lib/seed";
 
 /**
  * Shell for the admin leave screens.
@@ -13,7 +13,12 @@ import { COMPANY_NAME, seedDb } from "@/lib/seed";
  * Deliberately not the leave-management `(dashboard)` layout: that one reads
  * `readDb()` and signs a `Person` in off the `lm_user` cookie, both of which
  * depend on tables that no longer exist. This one is guarded by the Auth.js
- * session and every screen under it renders the in-memory fixture.
+ * session.
+ *
+ * The Approvals badge counts the caller's own organization's pending requests
+ * out of `orgapp.LeaveRequest`. The screens under this layout are moving off
+ * the fixture one at a time; /approvals and /attendance have gone, and
+ * `COMPANY_NAME` is all that is still read from lib/seed.ts here.
  */
 
 const NAV: NavItem[] = [
@@ -32,7 +37,7 @@ export default async function LeaveLayout({
 }) {
   const actor = await requirePageRole(Role.ADMIN);
   const session = await auth();
-  const pending = pendingRequests(seedDb()).length;
+  const pending = await countPendingLeaveRequests(actor);
 
   const items = NAV.map((item) =>
     item.href === "/approvals" ? { ...item, badge: pending } : item,

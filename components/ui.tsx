@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
-import { STATUS_STYLE } from "@/lib/ui";
+import { LeaveRequestStatus } from "@/generated/prisma/enums";
 import type { RequestStatus } from "@/lib/types";
+import { LEGACY_STATUS_STYLE, STATUS_STYLE } from "@/lib/ui";
 
 /* Shared class strings, so form controls look identical everywhere. */
 
@@ -74,15 +75,27 @@ export function Avatar({
   );
 }
 
-export function StatusBadge({ status }: { status: RequestStatus }) {
-  const style = STATUS_STYLE[status];
+function Badge({ label, className }: { label: string; className: string }) {
   return (
     <span
-      className={`rounded-md px-2 py-[3px] font-mono text-[11px] tracking-[0.08em] ${style.className}`}
+      className={`rounded-md px-2 py-[3px] font-mono text-[11px] tracking-[0.08em] ${className}`}
     >
-      {style.label}
+      {label}
     </span>
   );
+}
+
+export function StatusBadge({ status }: { status: LeaveRequestStatus }) {
+  return <Badge {...STATUS_STYLE[status]} />;
+}
+
+/**
+ * The same badge for the screens still on the fixture's lowercase status.
+ * Deleted when they move to real data — `StatusBadge` above is the one keyed
+ * by the database enum.
+ */
+export function LegacyStatusBadge({ status }: { status: RequestStatus }) {
+  return <Badge {...LEGACY_STATUS_STYLE[status]} />;
 }
 
 /** Dashed "nothing selected" placeholder. */

@@ -1,8 +1,8 @@
 import Link from "next/link";
 
-import { DemoBanner } from "@/components/demo-banner";
+// One import from the enums module, not two — `no-duplicate-imports` is on.
+import { LeaveRequestStatus, Role } from "@/generated/prisma/enums";
 import { PageHeader } from "@/components/page-header";
-import { RequestThread } from "@/components/request-thread";
 import {
   Avatar,
   Card,
@@ -10,65 +10,65 @@ import {
   MonoLabel,
   StatusBadge,
   dangerButtonClass,
-  ghostButtonClass,
   primaryButtonClass,
   textareaClass,
 } from "@/components/ui";
 import { formatRange } from "@/lib/date";
-import { demoReviewRequest } from "@/lib/demo-actions";
+import { initialsFor } from "@/lib/domain";
+import { unitNoun } from "@/lib/leave";
+import { reviewLeaveRequestAction } from "@/lib/leave-actions";
 import {
-  balanceOf,
-  dayCountLabel,
-  formatBalance,
-  personOrFallback,
-  requestDays,
-} from "@/lib/domain";
-import { seedDb } from "@/lib/seed";
-import type { RequestStatus } from "@/lib/types";
+  findLeaveRequest,
+  leaveSummaryFor,
+  listLeaveRequests,
+} from "@/lib/leave-review-service";
+import { requirePageRole } from "@/lib/page-guards";
 
 /**
- * Admin approvals — demo data.
+ * Admin approvals — the organization's real leave requests.
  *
- * Every figure on this page comes from `seedDb()`, the in-memory fixture in
- * lib/seed.ts. Nothing is read from or written to Postgres: the tables this
- * screen was originally built against were dropped, and the `orgapp` schema
- * models organizations and users only, with no leave request of any kind.
+ * Every row comes from `orgapp.LeaveRequest` through
+ * lib/leave-review-service.ts, which scopes the read to the caller's own
+ * organization and authorizes the decision against the row's stored columns.
+ * Approve and Reject persist; there is no fixture left on this screen.
  *
- * So the layout, filters and detail panel are real; the records are not, and
- * Approve / Reject / Send comment do not persist. Making them persist means
- * choosing a data source first — restore the old tables, or add leave models to
- * prisma/schema.prisma — after which the `seedDb()` call below becomes a query.
+ * The balance in the panel is `leaveSummaryFor`, which shares its arithmetic
+ * with the `listOwnLeaveSummary` behind /apply — so the figure an approver
+ * reads here and the figure the member read when they filed cannot disagree.
  */
 
 const FILTERS = [
-  { key: "pending", label: "Pending" },
-  { key: "approved", label: "Approved" },
-  { key: "rejected", label: "Rejected" },
-  { key: "all", label: "All" },
+  { key: "pending", label: "Pending", status: LeaveRequestStatus.PENDING },
+  { key: "approved", label: "Approved", status: LeaveRequestStatus.APPROVED },
+  { key: "rejected", label: "Rejected", status: LeaveRequestStatus.REJECTED },
+  // No status: All includes WITHDRAWN, which is reachable now that a member
+  // can actually take a request back.
+  { key: "all", label: "All", status: undefined },
 ] as const;
-
-type FilterKey = (typeof FILTERS)[number]["key"];
-
 
 export default async function ApprovalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; r?: string; demo?: string }>;
+  searchParams: Promise<{ filter?: string; r?: string; error?: string }>;
 }) {
+  const actor = await requirePageRole(Role.ADMIN);
   const params = await searchParams;
-  const filter: FilterKey = FILTERS.some((f) => f.key === params.filter)
-    ? (params.filter as FilterKey)
-    : "pending";
+  const option = FILTERS.find((f) => f.key === params.filter) ?? FILTERS[0];
 
-  const db = seedDb();
-  const queue = db.requests.filter((request) =>
-    filter === "all" ? true : request.status === (filter as RequestStatus),
-  );
+  const queue = await listLeaveRequests(actor, { status: option.status });
 
+  // Scoped in the query, so an id from another organization comes back null
+  // down the same path a nonexistent one does. Falling back to the head of the
+  // queue keeps the panel filled when a decision drops a request out of the
+  // current filter.
   const selected =
-    queue.find((request) => request.id === params.r) ?? queue[0] ?? null;
+    (params.r ? await findLeaveRequest(actor, params.r) : null) ?? queue[0] ?? null;
 
-  const href = (requestId?: string, nextFilter: FilterKey = filter) =>
+  const summary = selected
+    ? await leaveSummaryFor(actor, selected.applicant.id)
+    : null;
+
+  const href = (requestId?: string, nextFilter: string = option.key) =>
     `/approvals?filter=${nextFilter}${requestId ? `&r=${requestId}` : ""}`;
 
   return (
@@ -78,24 +78,28 @@ export default async function ApprovalsPage({
         subtitle="Requests waiting on you, oldest first."
       />
 
-      <DemoBanner action={params.demo} />
+      {params.error ? (
+        <p className="rounded-lg border border-danger-line bg-danger-tint px-3.5 py-2.5 text-sm text-danger">
+          {params.error}
+        </p>
+      ) : null}
 
       <div className="grid items-start gap-6 xl:grid-cols-[1.25fr_1fr]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap gap-1.5 border-b border-line px-3.5 py-3">
-            {FILTERS.map((option) => {
-              const active = option.key === filter;
+            {FILTERS.map((entry) => {
+              const active = entry.key === option.key;
               return (
                 <Link
-                  key={option.key}
-                  href={href(undefined, option.key)}
+                  key={entry.key}
+                  href={href(undefined, entry.key)}
                   className={`rounded-full border px-3 py-[5px] text-xs no-underline ${
                     active
                       ? "border-brand bg-brand text-white hover:text-white"
                       : "border-line bg-surface text-ink-2 hover:text-ink"
                   }`}
                 >
-                  {option.label}
+                  {entry.label}
                 </Link>
               );
             })}
@@ -103,7 +107,6 @@ export default async function ApprovalsPage({
 
           <div className="flex flex-col">
             {queue.map((request) => {
-              const person = personOrFallback(db, request.userId);
               const active = selected?.id === request.id;
               return (
                 <Link
@@ -114,18 +117,18 @@ export default async function ApprovalsPage({
                   }`}
                 >
                   <span className="flex items-center gap-2.5">
-                    <Avatar initials={person.initials} size={28} />
+                    <Avatar initials={initialsFor(request.applicant.name)} size={28} />
                     <span className="text-sm font-semibold text-ink">
-                      {person.name}
+                      {request.applicant.name}
                     </span>
-                    <span className="text-xs text-muted">{request.type}</span>
+                    <span className="text-xs text-muted">{request.policy.name}</span>
                   </span>
                   <StatusBadge status={request.status} />
                   <span className="col-start-1 font-mono text-[13px] text-ink-2">
-                    {formatRange(request.from, request.to)}
+                    {formatRange(request.startDate, request.endDate)}
                   </span>
                   <span className="text-[13px] text-muted">
-                    {dayCountLabel(requestDays(request))}
+                    {request.cost} {unitNoun(request.policy.unit, request.cost)}
                   </span>
                 </Link>
               );
@@ -142,32 +145,34 @@ export default async function ApprovalsPage({
         {selected ? (
           <Card className="sticky top-6 flex flex-col gap-5 p-5.5">
             {(() => {
-              const person = personOrFallback(db, selected.userId);
-              const left = balanceOf(db, selected.userId, selected.type);
-              const after =
-                selected.status === "approved"
-                  ? left
-                  : left - requestDays(selected);
+              const policy = summary?.balances.find(
+                (balance) => balance.id === selected.policy.id,
+              );
+              const left = policy
+                ? `${policy.balance} ${unitNoun(policy.unit, policy.balance)}`
+                : "—";
 
               return (
                 <>
                   <div className="flex flex-col gap-2.5">
                     <div className="flex items-center justify-between gap-3">
-                      <h2 className="text-[17px] font-semibold">{person.name}</h2>
+                      <h2 className="text-[17px] font-semibold">
+                        {selected.applicant.name}
+                      </h2>
                       <StatusBadge status={selected.status} />
                     </div>
 
                     <dl className="grid grid-cols-3 gap-3 rounded-[9px] bg-subtle p-3.5">
                       {[
-                        { label: "TYPE", value: selected.type },
+                        { label: "TYPE", value: selected.policy.name },
                         {
                           label: "DATES",
-                          value: formatRange(selected.from, selected.to),
+                          value: formatRange(selected.startDate, selected.endDate),
                         },
-                        {
-                          label: "BALANCE AFTER",
-                          value: formatBalance(db, after, selected.type),
-                        },
+                        // Pending days are already spent — see `SPENT` in
+                        // lib/leave-service.ts — so this is what is left
+                        // whether or not this request is approved.
+                        { label: "BALANCE LEFT", value: left },
                       ].map((cell) => (
                         <div key={cell.label} className="flex flex-col gap-1">
                           <dt className="text-[11px] tracking-[0.06em] text-muted">
@@ -179,63 +184,71 @@ export default async function ApprovalsPage({
                     </dl>
 
                     <p className="text-sm leading-relaxed text-ink text-pretty">
-                      {selected.reason}
+                      {selected.reason ?? "No reason given."}
                     </p>
                   </div>
 
-                  <form action={demoReviewRequest} className="flex flex-col gap-4">
-                    <input type="hidden" name="requestId" value={selected.id} />
-                    <input type="hidden" name="filter" value={filter} />
+                  {selected.status === LeaveRequestStatus.PENDING ? (
+                    <form
+                      action={reviewLeaveRequestAction}
+                      className="flex flex-col gap-4"
+                    >
+                      <input type="hidden" name="requestId" value={selected.id} />
+                      <input type="hidden" name="filter" value={option.key} />
 
-                    <div className="flex flex-col gap-3 border-t border-line pt-4">
-                      <MonoLabel>FEEDBACK</MonoLabel>
-                      <div className="max-h-60 overflow-auto">
-                        <RequestThread
-                          messages={selected.thread}
-                          viewerIsAdmin
-                          memberName={person.name}
-                          emptyText="No feedback yet."
+                      <div className="flex flex-col gap-3 border-t border-line pt-4">
+                        <MonoLabel>NOTE</MonoLabel>
+                        <textarea
+                          name="note"
+                          rows={3}
+                          placeholder="Required when rejecting…"
+                          className={`${textareaClass} bg-surface`}
                         />
                       </div>
-                      <textarea
-                        name="note"
-                        rows={3}
-                        placeholder="Write feedback for this request…"
-                        className={`${textareaClass} bg-surface`}
-                      />
-                    </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {selected.status === "pending" ? (
-                        <div className="flex flex-1 gap-2">
-                          <button
-                            type="submit"
-                            name="intent"
-                            value="approve"
-                            className={`${primaryButtonClass} flex-1`}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            type="submit"
-                            name="intent"
-                            value="reject"
-                            className={`${dangerButtonClass} flex-1`}
-                          >
-                            Reject
-                          </button>
-                        </div>
+                      <div className="flex flex-1 gap-2">
+                        <button
+                          type="submit"
+                          name="intent"
+                          value="approve"
+                          className={`${primaryButtonClass} flex-1`}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="submit"
+                          name="intent"
+                          value="reject"
+                          className={`${dangerButtonClass} flex-1`}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-col gap-2 border-t border-line pt-4">
+                      <MonoLabel>DECISION</MonoLabel>
+                      <p className="text-[13px] text-muted">
+                        {/*
+                          WITHDRAWN is not a decision and has no decider — the
+                          member took it back. Saying "an admin who has since
+                          left" here, which is what a bare `decidedBy` fallback
+                          does, would invent one.
+                        */}
+                        {selected.status === LeaveRequestStatus.WITHDRAWN
+                          ? "Withdrawn by the member."
+                          : `${
+                              selected.decidedBy?.name ??
+                              "An admin who has since left"
+                            } · ${selected.decidedAt?.slice(0, 10) ?? "—"}`}
+                      </p>
+                      {selected.decisionNote ? (
+                        <p className="text-sm leading-relaxed text-ink text-pretty">
+                          {selected.decisionNote}
+                        </p>
                       ) : null}
-                      <button
-                        type="submit"
-                        name="intent"
-                        value="comment"
-                        className={ghostButtonClass}
-                      >
-                        Send comment
-                      </button>
                     </div>
-                  </form>
+                  )}
                 </>
               );
             })()}

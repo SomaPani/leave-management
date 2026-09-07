@@ -6,7 +6,7 @@ import { RequestThread } from "@/components/request-thread";
 import {
   Card,
   EmptyPanel,
-  StatusBadge,
+  LegacyStatusBadge,
   primaryButtonClass,
   textareaClass,
 } from "@/components/ui";
@@ -50,7 +50,7 @@ export default async function RequestsPage({
                 }`}
               >
                 <span className="text-sm font-semibold text-ink">{request.type}</span>
-                <StatusBadge status={request.status} />
+                <LegacyStatusBadge status={request.status} />
                 <span className="font-mono text-[13px] text-ink-2">
                   {formatRange(request.from, request.to)}
                 </span>
@@ -74,7 +74,7 @@ export default async function RequestsPage({
               <h2 className="text-[17px] font-semibold">
                 {selected.type} · {formatRange(selected.from, selected.to)}
               </h2>
-              <StatusBadge status={selected.status} />
+              <LegacyStatusBadge status={selected.status} />
             </div>
 
             <p className="text-sm leading-relaxed text-ink text-pretty">
