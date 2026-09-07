@@ -1994,7 +1994,25 @@ A rejected request the member can see but cannot read the reason for is the fixt
   redirect(`/requests?r=${id}`);
 ```
 
-- [ ] **Step 4: Remove the confirmation strip from `/apply`**
+- [ ] **Step 4: Remove the confirmation strip from `/apply`, and delete the demo stand-ins**
+
+Deferred here from Task 4 Step 6, because this is where the last caller goes.
+From `lib/demo-actions.ts`, delete `demoReviewRequest` (with its
+`/* --- approvals --- */` banner) and `demoUpdateOwnRequest`, and update the
+file's header comment, which lists which screens have left the fixture:
+
+```
+ * Attendance has left: it is backed by `orgapp.Attendance` and writes through
+ * lib/attendance-actions.ts. Team left before it, then the holiday calendar,
+ * then Apply, and now the approvals loop — /approvals and /requests both write
+ * through lib/leave-actions.ts. The rest go the same way: each needs a real
+ * data source first, not a different action.
+```
+
+From `components/demo-banner.tsx`, delete the now-unreachable keys `approve`,
+`reject`, `comment` and `reply` from `MESSAGES`.
+
+Then, in `app/(member)/apply/page.tsx`:
 
 In `app/(member)/apply/page.tsx`, delete the `submitted` block, the `findOwnLeaveRequest` call and its import, the `formatRange` and `unitNoun` imports if now unused, and drop `submitted` from the `searchParams` type. The `?error=` strip stays — `backWithError` still sends failures there.
 
