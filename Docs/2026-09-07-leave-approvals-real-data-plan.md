@@ -307,7 +307,7 @@ git commit -m "Record who decided a leave request, when, and why"
 
   Task 3 calls both.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add `canListLeaveRequests` and `canReviewLeave` to the import list at the top of `tests/rbac.test.ts` (it is alphabetical — they go after `canListLeavePolicies` and after `canReadOwnAttendance` respectively). Then append:
 
@@ -349,7 +349,7 @@ describe("listing leave requests across a roster", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 npm test -- tests/rbac.test.ts
@@ -357,7 +357,7 @@ npm test -- tests/rbac.test.ts
 
 Expected: FAIL — `canReviewLeave is not exported by lib/rbac.ts`.
 
-- [ ] **Step 3: Add the predicates**
+- [x] **Step 3: Add the predicates**
 
 In `lib/rbac.ts`, after `canApplyForLeave`:
 
@@ -405,7 +405,7 @@ export function canListLeaveRequests(actor: Actor): boolean {
 }
 ```
 
-- [ ] **Step 4: Run them and watch them pass**
+- [x] **Step 4: Run them and watch them pass**
 
 ```bash
 npm test -- tests/rbac.test.ts
@@ -413,7 +413,7 @@ npm test -- tests/rbac.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/rbac.ts tests/rbac.test.ts
