@@ -39,11 +39,13 @@ vi.mock("next/cache", () => ({
 
 const { prisma } = await import("@/lib/prisma");
 const actions = await import("@/lib/leave-actions");
+const requests = await import("@/lib/leave-service");
 
 const RUN = `lvact-${Date.now().toString(36)}`;
 const email = (local: string) => `${RUN}-${local}@example.test`;
 
 let orgId = "";
+let adminId = "";
 let memberId = "";
 let casualId = "";
 let member: Actor;
@@ -61,6 +63,7 @@ beforeAll(async () => {
       organizationId: orgId,
     },
   });
+  adminId = admin.id;
 
   const person = await prisma.user.create({
     data: {
@@ -92,6 +95,12 @@ afterAll(async () => {
   await prisma.user.deleteMany({ where: { organizationId: orgId } });
   await prisma.organization.delete({ where: { id: orgId } });
   await prisma.$disconnect();
+});
+
+const adminActor = (): Actor => ({
+  id: adminId,
+  role: Role.ADMIN,
+  organizationId: orgId,
 });
 
 beforeEach(async () => {
@@ -186,5 +195,77 @@ describe("submitting a leave request", () => {
 
     expect(errorIn(url)).toBe("You must be signed in.");
     expect(await prisma.leaveRequest.count({ where: { userId: memberId } })).toBe(0);
+  });
+});
+
+describe("reviewLeaveRequestAction", () => {
+  it("approves and returns to the filter it came from", async () => {
+    actorRef.current = member;
+    const filed = await requests.createOwnLeaveRequest(member, {
+      policyId: casualId,
+      startDate: "2027-02-01",
+      endDate: "2027-02-02",
+      reason: null,
+    });
+
+    actorRef.current = adminActor();
+    const form = new FormData();
+    form.set("requestId", filed.id);
+    form.set("intent", "approve");
+    form.set("filter", "pending");
+    form.set("note", "Fine.");
+
+    await expect(actions.reviewLeaveRequestAction(form)).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
+
+    expect(nav.redirectedTo).toBe(`/approvals?filter=pending&r=${filed.id}`);
+    expect(nav.revalidated).toContain("/approvals");
+  });
+
+  it("puts a refusal back on the screen as a readable message", async () => {
+    actorRef.current = member;
+    const filed = await requests.createOwnLeaveRequest(member, {
+      policyId: casualId,
+      startDate: "2027-02-08",
+      endDate: "2027-02-09",
+      reason: null,
+    });
+
+    actorRef.current = adminActor();
+    const form = new FormData();
+    form.set("requestId", filed.id);
+    form.set("intent", "reject");
+    form.set("filter", "pending");
+    form.set("note", "");
+
+    await expect(actions.reviewLeaveRequestAction(form)).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
+
+    expect(nav.redirectedTo).toContain("error=");
+    expect(decodeURIComponent(nav.redirectedTo)).toContain("needs a reason");
+  });
+});
+
+describe("withdrawOwnRequestAction", () => {
+  it("withdraws and returns to the request", async () => {
+    actorRef.current = member;
+    const filed = await requests.createOwnLeaveRequest(member, {
+      policyId: casualId,
+      startDate: "2027-02-15",
+      endDate: "2027-02-16",
+      reason: null,
+    });
+
+    const form = new FormData();
+    form.set("requestId", filed.id);
+
+    await expect(actions.withdrawOwnRequestAction(form)).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
+
+    expect(nav.redirectedTo).toBe(`/requests?r=${filed.id}`);
+    expect(nav.revalidated).toContain("/requests");
   });
 });
