@@ -1279,6 +1279,49 @@ describe("the applicant's balance, as the approver sees it", () => {
   });
 });
 
+describe("a request filed against a policy that has since been retired", () => {
+  it("still shows the approver a balance, where the member's own summary does not", async () => {
+    await clearRequests();
+
+    // Retiring a policy stops new applications. It does not decide the
+    // requests already filed against it, and the admin deciding one needs the
+    // same number they would get for any other policy.
+    const retired = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: "Sabbatical",
+        allowance: 30,
+        active: false,
+        effectiveFrom: new Date("2026-01-01"),
+      },
+    });
+
+    await prisma.leaveRequest.create({
+      data: {
+        organizationId: orgId,
+        userId: memberId,
+        policyId: retired.id,
+        startDate: new Date("2026-10-19"),
+        endDate: new Date("2026-10-20"),
+        cost: 2,
+      },
+    });
+
+    const approver = await review.leaveSummaryFor(adminActor(), memberId, "2026-12-31");
+    const retiredBalance = approver.balances.find((b) => b.id === retired.id);
+
+    expect(retiredBalance).toMatchObject({ name: "Sabbatical", used: 2, balance: 28 });
+    expect(retiredBalance?.active).toBe(false);
+
+    // /apply must not offer it, so the member's own summary still omits it.
+    const own = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
+    expect(own.balances.map((b) => b.name)).not.toContain("Sabbatical");
+
+    await clearRequests();
+    await prisma.leavePolicy.delete({ where: { id: retired.id } });
+  });
+});
+
 describe("withdrawing one's own request", () => {
   it("withdraws a pending request and returns its days", async () => {
     await clearRequests();

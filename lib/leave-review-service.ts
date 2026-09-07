@@ -156,7 +156,8 @@ export async function countPendingLeaveRequests(actor: Actor): Promise<number> {
  * organization answers 404 rather than confirming that the person exists.
  *
  * The arithmetic is `summaryFor` in lib/leave-service.ts — the same function
- * `listOwnLeaveSummary` calls, not a second copy of it.
+ * `listOwnLeaveSummary` calls, not a second copy of it. The one difference is
+ * deliberate and passed as an argument: this view includes retired policies.
  */
 export async function leaveSummaryFor(
   actor: Actor,
@@ -172,7 +173,11 @@ export async function leaveSummaryFor(
     throw new HttpError(404, "That member does not exist.");
   }
 
-  return summaryFor(member.organizationId, userId, asOf);
+  // Retired policies included: this view exists to decide requests, and a
+  // request filed before its policy was withdrawn from the scheme still needs
+  // a balance beside it. `listOwnLeaveSummary` stays active-only, so /apply
+  // goes on offering only what a member may actually pick.
+  return summaryFor(member.organizationId, userId, asOf, true);
 }
 
 /* --------------------------------------------------------------- writing -- */

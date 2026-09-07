@@ -63,6 +63,7 @@ const POLICY_FIELDS = {
   prorated: true,
   cap: true,
   effectiveFrom: true,
+  active: true,
 } as const;
 
 // Exported for lib/leave-review-service.ts, which selects these fields plus
@@ -101,6 +102,12 @@ export type LeavePolicyRecord = {
   cap: number | null;
   /** `YYYY-MM-DD`. */
   effectiveFrom: string;
+  /**
+   * False once a policy is retired. Retiring stops new applications; it does
+   * not decide the requests already filed against it, so an approver still
+   * sees these and needs to know which they are.
+   */
+  active: boolean;
 };
 
 export type LeaveBalanceRecord = LeavePolicyRecord & {
@@ -245,10 +252,18 @@ async function approverFor(
  * Takes an organization id rather than an actor and decides nothing:
  * `listLeavePolicies` below is the authorized entry point, and `summaryFor`
  * is the other caller, which has already authorized in its own way.
+ *
+ * `includeRetired` is for the approver's view only. A member picking a leave
+ * type must not be offered one that has been withdrawn from the scheme, but a
+ * request filed before it was retired still has to be decided, and the admin
+ * deciding it needs the same balance they would get for any other policy.
  */
-async function policiesIn(organizationId: string): Promise<LeavePolicyRecord[]> {
+async function policiesIn(
+  organizationId: string,
+  includeRetired = false,
+): Promise<LeavePolicyRecord[]> {
   const rows = await prisma.leavePolicy.findMany({
-    where: { organizationId, active: true },
+    where: { organizationId, ...(includeRetired ? {} : { active: true }) },
     select: POLICY_FIELDS,
     orderBy: [{ position: "asc" }, { name: "asc" }],
   });
@@ -295,6 +310,7 @@ export async function summaryFor(
   organizationId: string,
   userId: string,
   asOf: string,
+  includeRetired = false,
 ): Promise<LeaveSummary> {
   const applicant = await prisma.user.findUnique({
     where: { id: userId },
@@ -313,7 +329,7 @@ export async function summaryFor(
     // The policy list is the organization's, not the caller's, so an admin
     // reading a member's balance sees the entitlements that member is
     // actually measured against.
-    policiesIn(organizationId),
+    policiesIn(organizationId, includeRetired),
     // Every spent request, not one year's. A carrying policy needs each year's
     // usage from its accrual start, because the cap is applied at every year
     // boundary and cannot be collapsed into one subtraction. This is a single

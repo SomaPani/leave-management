@@ -148,8 +148,14 @@ export default async function ApprovalsPage({
               const policy = summary?.balances.find(
                 (balance) => balance.id === selected.policy.id,
               );
+              // `leaveSummaryFor` includes retired policies, so a request
+              // filed before its type left the scheme still shows a balance.
+              // Marked, though: the number is real, but the entitlement behind
+              // it is closed and the member cannot file against it again.
               const left = policy
-                ? `${policy.balance} ${unitNoun(policy.unit, policy.balance)}`
+                ? `${policy.balance} ${unitNoun(policy.unit, policy.balance)}${
+                    policy.active ? "" : " · retired"
+                  }`
                 : "—";
 
               return (
