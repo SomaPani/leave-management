@@ -1541,7 +1541,22 @@ git commit -m "Approve, reject and withdraw a leave request for real"
 - Consumes: `listLeaveRequests`, `findLeaveRequest`, `countPendingLeaveRequests`, `leaveSummaryFor` (Task 3); `reviewLeaveRequestAction` (Task 4).
 - Produces: `STATUS_STYLE` re-keyed to `LeaveRequestStatus`; `StatusBadge({ status: LeaveRequestStatus })`. Task 6 renders the same badge.
 
-- [ ] **Step 1: Re-key `STATUS_STYLE`**
+- [ ] **Step 1: Re-key `STATUS_STYLE`** — and add a legacy twin for `/requests`
+
+> Re-keying alone breaks `app/(member)/requests/page.tsx`, which is still on the
+> fixture's lowercase `RequestStatus` until Task 6, so `tsc` and `npm run build`
+> fail in between while `npm test` stays green — vitest does not typecheck and
+> neither page is imported by a test. Step 8's "all clean" and Step 2's "errors
+> in both files" cannot both be true.
+>
+> Resolved the way attendance already resolved it: `LEGACY_STATUS_STYLE` in
+> `lib/ui.ts` and `LegacyStatusBadge` in `components/ui.tsx` live beside the
+> real ones until the fixture screen goes, exactly as `LEGACY_ATTENDANCE_STYLE`
+> does. Both are deleted in **Task 6 Step 1**. Deliberately not a cast at the
+> call site: the two unions spell the same four states today, so a cast would
+> compile, and a fixture status with no database counterpart would then reach
+> `STATUS_STYLE[status]` as `undefined` and crash on `.className`. A second
+> `Record` makes that a type error instead.
 
 `lib/ui.ts` keys it by the fixture's lowercase `RequestStatus`; the database gives `"PENDING"`. `StatusBadge` would index `undefined` and crash on `style.className`.
 
@@ -1845,7 +1860,13 @@ git commit -m "Put the approvals queue on the organization's real requests"
 - Consumes: `listOwnLeaveRequests`, `findOwnLeaveRequest` (existing); `withdrawOwnRequestAction` (Task 4); `StatusBadge` (Task 5).
 - Produces: nothing further.
 
-- [ ] **Step 1: Rewrite `/requests`**
+- [ ] **Step 1: Rewrite `/requests`, and retire the legacy badge**
+
+This page is the last consumer of the fixture's lowercase status, so once it
+reads `listOwnLeaveRequests` its status is already a `LeaveRequestStatus`.
+Delete `LEGACY_STATUS_STYLE` from `lib/ui.ts` and `LegacyStatusBadge` from
+`components/ui.tsx` — both added in Task 5 Step 1 — and use `StatusBadge`.
+`RequestStatus` in `lib/types.ts` stays; the other fixture screens still use it.
 
 Replace the whole of `app/(member)/requests/page.tsx`:
 
