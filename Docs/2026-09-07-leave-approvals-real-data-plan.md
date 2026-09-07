@@ -1692,6 +1692,17 @@ Inside the `queue.map`, replace the fixture lookups:
 
 - [ ] **Step 5: Rewrite the detail panel**
 
+**Branch on three states, not two.** `status` has four members and only
+`PENDING` gets the form, so the else-branch catches `APPROVED`, `REJECTED`
+**and `WITHDRAWN`**. Withdrawal is not a decision: `withdrawOwnLeaveRequest`
+writes `status` alone, leaving `decidedAt`, `decidedById` and `decisionNote`
+null. A bare `decidedBy?.name ?? "An admin who has since left"` would therefore
+render a member's own withdrawal as a departed admin's decision — inventing a
+person. The fallback is right for the case it was written for, since
+`decidedById` is `SetNull` and a real decision by a deleted admin does lose its
+name; it is only wrong to reach it from a status that never had a decider.
+`WITHDRAWN` became reachable in Task 3, so no screen had to render it before.
+
 Replace the whole IIFE body. `BALANCE AFTER` uses the applicant's real summary; because `PENDING` already counts as spent, a pending request's days are *already* out of the balance and the figure is simply what remains:
 
 ```tsx
@@ -1779,10 +1790,18 @@ Replace the whole IIFE body. `BALANCE AFTER` uses the applicant's real summary; 
                     <div className="flex flex-col gap-2 border-t border-line pt-4">
                       <MonoLabel>DECISION</MonoLabel>
                       <p className="text-[13px] text-muted">
-                        {selected.decidedBy?.name ?? "An admin who has since left"} ·{" "}
-                        {selected.decidedAt
-                          ? selected.decidedAt.slice(0, 10)
-                          : "—"}
+                        {/*
+                          WITHDRAWN is not a decision and has no decider — the
+                          member took it back. Saying "an admin who has since
+                          left" here, which is what a bare `decidedBy` fallback
+                          does, would invent one.
+                        */}
+                        {selected.status === LeaveRequestStatus.WITHDRAWN
+                          ? "Withdrawn by the member."
+                          : `${
+                              selected.decidedBy?.name ??
+                              "An admin who has since left"
+                            } · ${selected.decidedAt?.slice(0, 10) ?? "—"}`}
                       </p>
                       {selected.decisionNote ? (
                         <p className="text-sm leading-relaxed text-ink text-pretty">
