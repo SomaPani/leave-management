@@ -159,7 +159,7 @@ None. All three columns are nullable and every existing row is `PENDING`, for wh
 - Consumes: nothing.
 - Produces: `LeaveRequest.decidedAt: Date | null`, `LeaveRequest.decidedById: string | null`, `LeaveRequest.decisionNote: string | null`, and the relation name `"LeaveRequestDecider"`. Every later task depends on these.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/leave.integration.test.ts`, inside the existing `describe("the database enforces what the schema cannot say")` block:
 
@@ -206,7 +206,7 @@ Add to `tests/leave.integration.test.ts`, inside the existing `describe("the dat
   });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 docker compose up -d
@@ -215,7 +215,7 @@ npm test -- tests/leave.integration.test.ts
 
 Expected: FAIL — `Unknown argument 'decidedAt'`. Prisma does not know the column.
 
-- [ ] **Step 3: Add the columns to the schema**
+- [x] **Step 3: Add the columns to the schema**
 
 In `prisma/schema.prisma`, inside `model LeaveRequest`, after the `approverId` / `approver` pair and before `createdAt`, add the block from §3.1 verbatim (all three columns with their doc comments).
 
@@ -233,7 +233,7 @@ In `model User`, beside `leaveRequests` and `leaveApprovals`, add:
   leaveDecisions LeaveRequest[] @relation("LeaveRequestDecider")
 ```
 
-- [ ] **Step 4: Write the migration by hand**
+- [x] **Step 4: Write the migration by hand**
 
 Create `prisma/migrations/20260907120000_leave_decisions/migration.sql`:
 
@@ -267,7 +267,7 @@ CREATE INDEX "LeaveRequest_organizationId_status_createdAt_idx"
   ON "orgapp"."LeaveRequest"("organizationId", "status", "createdAt");
 ```
 
-- [ ] **Step 5: Apply it and regenerate the client**
+- [x] **Step 5: Apply it and regenerate the client**
 
 ```bash
 npx prisma migrate dev
@@ -276,7 +276,7 @@ npx prisma generate
 
 Expected: the migration applies with no drift warning. If Prisma reports drift, the hand-written SQL disagrees with the schema — fix the SQL, not the schema.
 
-- [ ] **Step 6: Run the test and watch it pass**
+- [x] **Step 6: Run the test and watch it pass**
 
 ```bash
 npm test -- tests/leave.integration.test.ts
@@ -284,7 +284,7 @@ npm test -- tests/leave.integration.test.ts
 
 Expected: PASS, including every test that was already green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add prisma/schema.prisma prisma/migrations tests/leave.integration.test.ts
