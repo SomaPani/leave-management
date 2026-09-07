@@ -460,7 +460,7 @@ The biggest task. It ends with every read and write the two screens need, tested
 
   Tasks 4, 5 and 6 call these.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/leave.integration.test.ts`. Add the import beside the existing `const service = await import("@/lib/leave-service");`:
 
@@ -730,7 +730,7 @@ describe("withdrawing one's own request", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 npm test -- tests/leave.integration.test.ts
@@ -738,7 +738,7 @@ npm test -- tests/leave.integration.test.ts
 
 Expected: FAIL — `Cannot find module '@/lib/leave-review-service'`.
 
-- [ ] **Step 3: Put the decision on the record, and export what the new module needs**
+- [x] **Step 3: Put the decision on the record, and export what the new module needs**
 
 The decision belongs on `LeaveRequestRecord` itself, not only on the approver's view of it: a member whose leave is refused must be able to read why. Only *who* decided is approver-only.
 
@@ -808,7 +808,7 @@ Also export the row type it needs:
 export type RequestRow = {
 ```
 
-- [ ] **Step 4: Extract the shared balance body in `lib/leave-service.ts`**
+- [x] **Step 4: Extract the shared balance body in `lib/leave-service.ts`**
 
 `listOwnLeaveSummary` currently reads `actor.id` in three places. Split the body out so `leaveSummaryFor` can reuse it rather than copy it. Replace `listOwnLeaveSummary` with:
 
@@ -932,7 +932,7 @@ export async function listLeavePolicies(actor: Actor): Promise<LeavePolicyRecord
 }
 ```
 
-- [ ] **Step 5: Add `withdrawOwnLeaveRequest` to `lib/leave-service.ts`**
+- [x] **Step 5: Add `withdrawOwnLeaveRequest` to `lib/leave-service.ts`**
 
 At the end of the writing section:
 
@@ -975,7 +975,7 @@ export async function withdrawOwnLeaveRequest(
 }
 ```
 
-- [ ] **Step 6: Write `lib/leave-review-service.ts`**
+- [x] **Step 6: Write `lib/leave-review-service.ts`**
 
 ```ts
 import { LeaveRequestStatus } from "@/generated/prisma/enums";
@@ -1200,7 +1200,7 @@ export async function decideLeaveRequest(
 }
 ```
 
-- [ ] **Step 7: Run the tests and watch them pass**
+- [x] **Step 7: Run the tests and watch them pass**
 
 ```bash
 npm test -- tests/leave.integration.test.ts
@@ -1208,7 +1208,7 @@ npm test -- tests/leave.integration.test.ts
 
 Expected: PASS, every block including the ones that were green before Task 1. If `"agrees with the member's own summary for the same date"` fails, `summaryFor` is not actually shared — that test exists precisely to catch a copy.
 
-- [ ] **Step 8: Run the whole suite**
+- [x] **Step 8: Run the whole suite**
 
 ```bash
 npm test
@@ -1216,7 +1216,7 @@ npm test
 
 Expected: PASS. `lib/leave-service.ts` changed shape, so anything importing it is now in scope.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add lib/leave-review-service.ts lib/leave-service.ts tests/leave.integration.test.ts
