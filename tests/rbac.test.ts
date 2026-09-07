@@ -15,6 +15,7 @@ import {
   canListAttendance,
   canListHolidays,
   canListLeavePolicies,
+  canListLeaveRequests,
   canListMembers,
   canListOrganizations,
   canListRegions,
@@ -22,6 +23,7 @@ import {
   canManageRegions,
   canMarkAttendance,
   canReadOwnAttendance,
+  canReviewLeave,
   canUpdateAdmin,
   canUpdateMember,
   canUpdateOrganization,
@@ -354,5 +356,41 @@ describe("who can apply for leave", () => {
 
   it("denies an org-bound role whose organization is somehow missing", () => {
     expect(canApplyForLeave({ ...memberA, organizationId: null })).toBe(false);
+  });
+});
+
+describe("reviewing a leave request", () => {
+  it("allows an admin of the organization it was filed in", () => {
+    expect(canReviewLeave(adminA, ORG_A, "someone-else")).toBe(true);
+  });
+
+  it("denies an admin of another organization", () => {
+    expect(canReviewLeave(adminA, ORG_B, "someone-else")).toBe(false);
+  });
+
+  it("denies a member, who has no queue to work", () => {
+    expect(canReviewLeave(memberA, ORG_A, "someone-else")).toBe(false);
+  });
+
+  it("denies a superadmin, who reads an organization but does not run it", () => {
+    expect(canReviewLeave(superadmin, ORG_A, "someone-else")).toBe(false);
+  });
+
+  it("denies an admin their own request — canApplyForLeave admits admins", () => {
+    expect(canReviewLeave(adminA, ORG_A, adminA.id)).toBe(false);
+  });
+});
+
+describe("listing leave requests across a roster", () => {
+  it("allows an admin", () => {
+    expect(canListLeaveRequests(adminA)).toBe(true);
+  });
+
+  it("allows a superadmin, who reads every organization", () => {
+    expect(canListLeaveRequests(superadmin)).toBe(true);
+  });
+
+  it("denies a member — /api/leave-requests stays self-scoped for them", () => {
+    expect(canListLeaveRequests(memberA)).toBe(false);
   });
 });

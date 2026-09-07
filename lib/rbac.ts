@@ -190,6 +190,48 @@ export function canApplyForLeave(actor: Actor): boolean {
   );
 }
 
+/**
+ * Deciding a request belongs to the ADMIN of the organization it was filed in
+ * — the same rule as `canManageHolidays`. Pass the *stored*
+ * `LeaveRequest.organizationId`, never one from a request body.
+ *
+ * `LeaveRequest.approverId` is deliberately not consulted. It records who the
+ * request was *routed* to at submit, and routing is not permission: a manager
+ * may be a MEMBER, who cannot open /approvals at all, and the column is
+ * SetNull when an approver leaves. Either would strand a request that any
+ * admin can plainly see.
+ *
+ * The applicant is excluded even when they are that admin. `canApplyForLeave`
+ * admits an ADMIN deliberately — "an admin is a person who takes leave" — so
+ * without this line an admin approves their own leave. The consequence is
+ * accepted knowingly: in a one-admin organization that admin's own request
+ * cannot be decided by anybody, which is the better of the two failures.
+ */
+export function canReviewLeave(
+  actor: Actor,
+  requestOrganizationId: string,
+  applicantId: string,
+): boolean {
+  return (
+    actor.role === Role.ADMIN &&
+    actor.organizationId === requestOrganizationId &&
+    actor.id !== applicantId
+  );
+}
+
+/**
+ * Reading follows `canListAttendance`, not `canReviewLeave`: a SuperAdmin sees
+ * every organization, so they may read the requests inside one even though
+ * they cannot decide them. Scope the query with `visibleOrgId`.
+ *
+ * A MEMBER is excluded. Their own requests come from the self-scoped reads in
+ * lib/leave-service.ts, which take no id and therefore have no id to tamper
+ * with.
+ */
+export function canListLeaveRequests(actor: Actor): boolean {
+  return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
+}
+
 export function canListOrganizations(actor: Actor): boolean {
   return actor.role === Role.SUPERADMIN;
 }
