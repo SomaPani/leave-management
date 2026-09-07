@@ -1244,7 +1244,7 @@ git commit -m "Read and decide an organization's leave requests"
 
   Tasks 5 and 6 wire these to the two forms.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/leave-actions.test.ts`. The file already stubs `redirect`, `revalidatePath` and `currentActor`; reuse them. Add an admin to its `beforeAll` — after the existing `prisma.user.create` for the admin, capture the id:
 
@@ -1340,7 +1340,7 @@ describe("withdrawOwnRequestAction", () => {
 
 Add `const requests = await import("@/lib/leave-service");` beside the existing `actions` import if the file does not already have it.
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 npm test -- tests/leave-actions.test.ts
@@ -1348,7 +1348,7 @@ npm test -- tests/leave-actions.test.ts
 
 Expected: FAIL — `actions.reviewLeaveRequestAction is not a function`.
 
-- [ ] **Step 3: Add the parser to `lib/leave-input.ts`**
+- [x] **Step 3: Add the parser to `lib/leave-input.ts`**
 
 ```ts
 /** Long enough to explain a refusal, short enough that the column is not a dumping ground. */
@@ -1397,7 +1397,7 @@ Add to the imports at the top of the file:
 import type { Decision, DecisionInput } from "@/lib/leave-review-service";
 ```
 
-- [ ] **Step 4: Create `app/api/leave-requests/[id]/route.ts`**
+- [x] **Step 4: Create `app/api/leave-requests/[id]/route.ts`**
 
 ```ts
 import { errorResponse, readJson } from "@/lib/api";
@@ -1436,7 +1436,7 @@ export async function PATCH(request: Request, ctx: Ctx): Promise<Response> {
 }
 ```
 
-- [ ] **Step 5: Add the two actions to `lib/leave-actions.ts`**
+- [x] **Step 5: Add the two actions to `lib/leave-actions.ts`**
 
 ```ts
 /**
@@ -1489,7 +1489,15 @@ import { decideLeaveRequest } from "@/lib/leave-review-service";
 import { createOwnLeaveRequest, withdrawOwnLeaveRequest } from "@/lib/leave-service";
 ```
 
-- [ ] **Step 6: Delete the demo stand-ins**
+- [x] **Step 6: Delete the demo stand-ins** — **DEFERRED to Task 6 Step 4.**
+
+> Deleting them here leaves `app/(leave)/approvals/page.tsx` and
+> `app/(member)/requests/page.tsx` importing functions that no longer exist, so
+> `tsc --noEmit` and `npm run build` fail until Task 6 rewrites the second of
+> them. Vitest does not typecheck, so this step's own test command stays green
+> and hides it. The deletion itself is unchanged, just moved to the task where
+> the last caller actually disappears; every commit compiles that way.
+> **Skip the deletion here — do it in Task 6 Step 4.**
 
 From `lib/demo-actions.ts`, delete `demoReviewRequest` (with its `/* --- approvals --- */` banner) and `demoUpdateOwnRequest`. Update the file's header comment, which lists which screens have left the fixture:
 
@@ -1503,7 +1511,7 @@ From `lib/demo-actions.ts`, delete `demoReviewRequest` (with its `/* --- approva
 
 From `components/demo-banner.tsx`, delete the now-unreachable keys `approve`, `reject`, `comment` and `reply` from `MESSAGES`.
 
-- [ ] **Step 7: Run the tests and watch them pass**
+- [x] **Step 7: Run the tests and watch them pass**
 
 ```bash
 npm test -- tests/leave-actions.test.ts
@@ -1511,7 +1519,7 @@ npm test -- tests/leave-actions.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add lib/leave-input.ts lib/leave-actions.ts lib/demo-actions.ts \
