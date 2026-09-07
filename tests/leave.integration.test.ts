@@ -291,6 +291,47 @@ describe("the database enforces what the schema cannot say", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("keeps a decided request readable after the deciding admin is deleted", async () => {
+    const leaver = await prisma.user.create({
+      data: {
+        name: "Run Leaver",
+        email: email("leaver"),
+        passwordHash: "x",
+        role: Role.ADMIN,
+        organizationId: orgId,
+      },
+    });
+
+    const request = await prisma.leaveRequest.create({
+      data: {
+        organizationId: orgId,
+        userId: memberId,
+        policyId: casualId,
+        startDate: new Date("2026-10-05"),
+        endDate: new Date("2026-10-06"),
+        cost: 2,
+        status: "APPROVED",
+        decidedAt: new Date("2026-09-07T10:00:00Z"),
+        decidedById: leaver.id,
+        decisionNote: "Fine.",
+      },
+    });
+
+    await prisma.user.delete({ where: { id: leaver.id } });
+
+    const after = await prisma.leaveRequest.findUnique({ where: { id: request.id } });
+
+    // Attribution, not ownership: the admin goes, the decision stays.
+    expect(after).toMatchObject({
+      status: "APPROVED",
+      decidedById: null,
+      decisionNote: "Fine.",
+    });
+    expect(after?.decidedAt).not.toBeNull();
+
+    await prisma.leaveRequest.delete({ where: { id: request.id } });
+  });
 });
 
 const memberActor = (): Actor => ({

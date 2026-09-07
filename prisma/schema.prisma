@@ -153,10 +153,13 @@ model User {
   attendance       Attendance[] @relation("AttendanceSubject")
   attendanceMarked Attendance[] @relation("AttendanceMarkedBy")
 
-  // Two relations again, for the same reason: the requests this person filed,
-  // and the requests routed to them for a decision.
+  // Three relations now, for the same reason: the requests this person filed,
+  // the requests routed to them for a decision, and the ones they actually
+  // decided. The last two differ routinely — any admin in the organization
+  // may decide a request, not only the one it was routed to.
   leaveRequests  LeaveRequest[] @relation("LeaveRequestSubject")
   leaveApprovals LeaveRequest[] @relation("LeaveRequestApprover")
+  leaveDecisions LeaveRequest[] @relation("LeaveRequestDecider")
 
   phone          String?
   personalEmail  String?
@@ -384,6 +387,31 @@ model LeaveRequest {
   approverId String?
   approver   User?   @relation("LeaveRequestApprover", fields: [approverId], references: [id], onDelete: SetNull)
 
+  /// When the decision was made. Null while PENDING.
+  ///
+  /// Distinct from `updatedAt`, which moves for any write. Reading "when was
+  /// this approved" off `updatedAt` would be wrong the first time anything
+  /// else touches the row.
+  decidedAt DateTime?
+
+  /// The admin who approved or rejected it — not necessarily `approverId`,
+  /// which records who it was *routed* to at submit. Any admin in the
+  /// organization may decide, so the two differ routinely.
+  ///
+  /// Nullable and SetNull for the reason `approverId` and
+  /// `Attendance.markedById` give: this is attribution, not ownership. An
+  /// admin who leaves is deleted, and neither blocking that delete nor
+  /// destroying the organization's leave history with it is acceptable. Null
+  /// therefore means "the admin who decided this is gone", never "undecided" —
+  /// `status` and `decidedAt` are what answer that.
+  decidedById String?
+  decidedBy   User?   @relation("LeaveRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  /// Why. Required by the service on a rejection, optional on an approval.
+  /// Not enforced by a CHECK: it is a policy about one transition, not an
+  /// invariant of the row, and a future status could reasonably not want it.
+  decisionNote String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -391,4 +419,7 @@ model LeaveRequest {
   @@index([organizationId, startDate])
   /// The balance query and the overlap check: one member, filtered by status.
   @@index([userId, status])
+  /// The approvals queue: one organization's requests in one state, oldest
+  /// filing first.
+  @@index([organizationId, status, createdAt])
 }
