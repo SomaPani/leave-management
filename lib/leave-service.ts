@@ -41,7 +41,10 @@ import {
  */
 
 /** Requests in these states have already spent their days. */
-const SPENT: LeaveRequestStatus[] = [
+// Exported for lib/leave-review-service.ts: a roster read that disagreed with
+// this list about what "spent" means would show a balance no member's own
+// screen agrees with.
+export const SPENT: LeaveRequestStatus[] = [
   LeaveRequestStatus.PENDING,
   LeaveRequestStatus.APPROVED,
 ];
@@ -62,7 +65,10 @@ const POLICY_FIELDS = {
   effectiveFrom: true,
 } as const;
 
-const REQUEST_FIELDS = {
+// Exported for lib/leave-review-service.ts, which selects these fields plus
+// the applicant and the deciding admin. One list, so a field added here
+// reaches both screens.
+export const REQUEST_FIELDS = {
   id: true,
   startDate: true,
   endDate: true,
@@ -70,6 +76,8 @@ const REQUEST_FIELDS = {
   reason: true,
   status: true,
   createdAt: true,
+  decidedAt: true,
+  decisionNote: true,
   policy: { select: { id: true, name: true, unit: true } },
   approver: { select: { id: true, name: true } },
 } as const;
@@ -136,9 +144,20 @@ export type LeaveRequestRecord = {
   status: LeaveRequestStatus;
   approver: ApproverRecord;
   createdAt: string;
+  /** ISO timestamp. Null while PENDING. */
+  decidedAt: string | null;
+  /**
+   * The approver's reason. The member sees it: a rejection they cannot read
+   * the reason for is the fixture's silence with a real status on it.
+   *
+   * `decidedById` is deliberately absent from this record. The applicant is
+   * told the decision and the reason, not which admin in the building made
+   * it; /approvals shows that, to admins, through `ReviewRequestRecord`.
+   */
+  decisionNote: string | null;
 };
 
-type RequestRow = {
+export type RequestRow = {
   id: string;
   startDate: Date;
   endDate: Date;
@@ -146,6 +165,8 @@ type RequestRow = {
   reason: string | null;
   status: LeaveRequestStatus;
   createdAt: Date;
+  decidedAt: Date | null;
+  decisionNote: string | null;
   policy: { id: string; name: string; unit: LeaveUnit };
   approver: { id: string; name: string } | null;
 };
@@ -168,7 +189,9 @@ function accrualName(accrual: LeaveAccrual): LeaveAccrualName {
   return accrual;
 }
 
-function toRecord(row: RequestRow): LeaveRequestRecord {
+// Exported for lib/leave-review-service.ts. The date and enum conversions
+// belong to the record shape, not to either caller.
+export function toRecord(row: RequestRow): LeaveRequestRecord {
   return {
     id: row.id,
     policy: { ...row.policy, unit: unitName(row.policy.unit) },
@@ -179,6 +202,8 @@ function toRecord(row: RequestRow): LeaveRequestRecord {
     status: row.status,
     approver: row.approver,
     createdAt: row.createdAt.toISOString(),
+    decidedAt: row.decidedAt?.toISOString() ?? null,
+    decisionNote: row.decisionNote,
   };
 }
 
@@ -214,13 +239,16 @@ async function approverFor(
 
 /* --------------------------------------------------------------- reading -- */
 
-export async function listLeavePolicies(actor: Actor): Promise<LeavePolicyRecord[]> {
-  if (!canListLeavePolicies(actor) || !actor.organizationId) {
-    throw new HttpError(403, "Your role does not permit this action.");
-  }
-
+/**
+ * One organization's active policies, in render order.
+ *
+ * Takes an organization id rather than an actor and decides nothing:
+ * `listLeavePolicies` below is the authorized entry point, and `summaryFor`
+ * is the other caller, which has already authorized in its own way.
+ */
+async function policiesIn(organizationId: string): Promise<LeavePolicyRecord[]> {
   const rows = await prisma.leavePolicy.findMany({
-    where: { organizationId: actor.organizationId, active: true },
+    where: { organizationId, active: true },
     select: POLICY_FIELDS,
     orderBy: [{ position: "asc" }, { name: "asc" }],
   });
@@ -233,46 +261,65 @@ export async function listLeavePolicies(actor: Actor): Promise<LeavePolicyRecord
   }));
 }
 
+export async function listLeavePolicies(actor: Actor): Promise<LeavePolicyRecord[]> {
+  if (!canListLeavePolicies(actor) || !actor.organizationId) {
+    throw new HttpError(403, "Your role does not permit this action.");
+  }
+  return policiesIn(actor.organizationId);
+}
+
 /**
- * Every policy with what this member has left of it, plus who their requests
- * go to — one call, because the Apply screen needs all of it at once.
+ * Every policy with what one member has left of it, plus who their requests
+ * go to.
  *
- * The balance is derived rather than stored, and now respects a credit
- * schedule: an EL day exists once its month has begun, so this answers 1 on
- * 4 September and 4 on 31 December for the same year. All of that arithmetic
- * is in lib/leave.ts; this function's job is to fetch what it needs.
+ * Takes the ids rather than an actor: it makes no authorization decision at
+ * all. Its two callers do — `listOwnLeaveSummary` below, and `leaveSummaryFor`
+ * in lib/leave-review-service.ts — and they must agree on the arithmetic to
+ * the day, or the balance an approver reads on /approvals contradicts the one
+ * the member read on /apply.
+ *
+ * The balance is derived rather than stored, and respects a credit schedule:
+ * an EL day exists once its month has begun, so this answers 1 on 4 September
+ * and 4 on 31 December for the same year. All of that arithmetic is in
+ * lib/leave.ts; this function's job is to fetch what it needs.
  *
  * PENDING counts alongside APPROVED, or a member could file the same six days
  * three times before anyone looked at the first one. Withdrawn and rejected
  * requests free their days by falling out of the filter, which is the whole
  * reason there is no ledger to reconcile.
  *
- * `asOf` is a parameter rather than always `todayIso()` so the schedule can be
- * tested at a chosen date without touching the clock.
+ * Exported for that second caller only. Nothing outside those two should reach
+ * a member's balance without deciding first whether it may.
  */
-export async function listOwnLeaveSummary(
-  actor: Actor,
-  asOf: string = todayIso(),
+export async function summaryFor(
+  organizationId: string,
+  userId: string,
+  asOf: string,
 ): Promise<LeaveSummary> {
-  const organizationId = applicantOrgFor(actor);
-
   const applicant = await prisma.user.findUnique({
-    where: { id: actor.id },
+    where: { id: userId },
     select: {
       joinedOn: true,
       manager: { select: { id: true, name: true } },
     },
   });
-  if (!applicant) throw new HttpError(401, "Your account no longer exists.");
+  // 404, where `listOwnLeaveSummary` used to answer 401 "Your account no
+  // longer exists." A shared function has two callers now, and only one of
+  // them is asking about themselves — "you have been deleted" is the wrong
+  // sentence to show an admin who mistyped a member id.
+  if (!applicant) throw new HttpError(404, "That member does not exist.");
 
   const [policies, spent, approver] = await Promise.all([
-    listLeavePolicies(actor),
+    // The policy list is the organization's, not the caller's, so an admin
+    // reading a member's balance sees the entitlements that member is
+    // actually measured against.
+    policiesIn(organizationId),
     // Every spent request, not one year's. A carrying policy needs each year's
     // usage from its accrual start, because the cap is applied at every year
     // boundary and cannot be collapsed into one subtraction. This is a single
     // person's leave history, so it stays small.
     prisma.leaveRequest.findMany({
-      where: { userId: actor.id, status: { in: SPENT } },
+      where: { userId, status: { in: SPENT } },
       select: { policyId: true, startDate: true, cost: true },
     }),
     approverFor(applicant.manager, organizationId),
@@ -300,6 +347,22 @@ export async function listOwnLeaveSummary(
     })),
     approver,
   };
+}
+
+/**
+ * The signed-in member's own summary — one call, because the Apply screen
+ * needs all of it at once.
+ *
+ * Self-scoped: the applicant is the session, so there is no id to tamper with.
+ *
+ * `asOf` is a parameter rather than always `todayIso()` so the credit schedule
+ * can be tested at a chosen date without touching the clock.
+ */
+export async function listOwnLeaveSummary(
+  actor: Actor,
+  asOf: string = todayIso(),
+): Promise<LeaveSummary> {
+  return summaryFor(applicantOrgFor(actor), actor.id, asOf);
 }
 
 export async function listOwnLeaveRequests(
@@ -422,6 +485,44 @@ export async function createOwnLeaveRequest(
         reason: input.reason,
         approverId: approver?.id ?? null,
       },
+      select: REQUEST_FIELDS,
+    });
+  });
+
+  return toRecord(row);
+}
+
+/**
+ * The applicant takes their own pending request back.
+ *
+ * `PENDING` only. An approved absence the team has already planned around is
+ * not the applicant's alone to cancel, and a rejected one has nothing to take
+ * back.
+ *
+ * Scoped by `userId` inside the lookup rather than fetched and then checked,
+ * so somebody else's id changes nothing and reports nothing — the same shape
+ * `findOwnLeaveRequest` uses. The lookup and the update share a transaction,
+ * so two submits racing each other cannot both pass the status check.
+ */
+export async function withdrawOwnLeaveRequest(
+  actor: Actor,
+  id: string,
+): Promise<LeaveRequestRecord> {
+  applicantOrgFor(actor);
+
+  const row = await prisma.$transaction(async (tx) => {
+    const existing = await tx.leaveRequest.findFirst({
+      where: { id, userId: actor.id },
+      select: { status: true },
+    });
+    if (!existing) throw new HttpError(404, "That request does not exist.");
+    if (existing.status !== LeaveRequestStatus.PENDING) {
+      throw new HttpError(409, "That request has already been decided.");
+    }
+
+    return tx.leaveRequest.update({
+      where: { id },
+      data: { status: LeaveRequestStatus.WITHDRAWN },
       select: REQUEST_FIELDS,
     });
   });

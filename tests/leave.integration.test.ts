@@ -24,6 +24,7 @@ vi.mock("@/lib/auth", () => ({
 
 const { prisma } = await import("@/lib/prisma");
 const service = await import("@/lib/leave-service");
+const review = await import("@/lib/leave-review-service");
 const policyRoute = await import("@/app/api/leave-policies/route");
 const requestRoute = await import("@/app/api/leave-requests/route");
 
@@ -1066,5 +1067,263 @@ describe("balances on a credit schedule", () => {
     await clearRequests();
     const summary = await service.listOwnLeaveSummary(memberActor());
     expect(summary.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("the approvals queue", () => {
+  it("returns the organization's pending requests, oldest filing first", async () => {
+    await clearRequests();
+
+    const older = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-02",
+      endDate: "2026-11-03",
+      reason: "First",
+    });
+    const newer = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-09",
+      endDate: "2026-11-10",
+      reason: "Second",
+    });
+
+    const queue = await review.listLeaveRequests(adminActor(), { status: "PENDING" });
+
+    expect(queue.map((r) => r.id)).toEqual([older.id, newer.id]);
+    expect(queue[0].applicant).toMatchObject({ id: memberId, name: "Run Member" });
+  });
+
+  it("never returns another organization's requests", async () => {
+    const foreignAdmin: Actor = {
+      id: "other-admin",
+      role: Role.ADMIN,
+      organizationId: otherOrgId,
+    };
+
+    const queue = await review.listLeaveRequests(foreignAdmin);
+
+    expect(queue).toEqual([]);
+  });
+
+  it("counts the pending requests for the badge", async () => {
+    expect(await review.countPendingLeaveRequests(adminActor())).toBe(2);
+  });
+
+  it("refuses a member, who has no queue to work", async () => {
+    await expect(review.listLeaveRequests(memberActor())).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+});
+
+describe("deciding a request", () => {
+  it("records the status, the time, the admin and the note", async () => {
+    await clearRequests();
+    const filed = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-16",
+      endDate: "2026-11-17",
+      reason: "Wedding",
+    });
+
+    const decided = await review.decideLeaveRequest(adminActor(), filed.id, {
+      decision: "APPROVED",
+      note: "Enjoy it.",
+    });
+
+    expect(decided).toMatchObject({
+      status: "APPROVED",
+      decisionNote: "Enjoy it.",
+      decidedBy: { id: adminId, name: "Run Admin" },
+    });
+    expect(decided.decidedAt).not.toBeNull();
+  });
+
+  it("refuses to decide an already-decided request", async () => {
+    const [only] = await review.listLeaveRequests(adminActor(), { status: "APPROVED" });
+
+    await expect(
+      review.decideLeaveRequest(adminActor(), only.id, {
+        decision: "REJECTED",
+        note: "Changed my mind.",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("refuses a rejection with no reason", async () => {
+    await clearRequests();
+    const filed = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-23",
+      endDate: "2026-11-24",
+      reason: null,
+    });
+
+    await expect(
+      review.decideLeaveRequest(adminActor(), filed.id, {
+        decision: "REJECTED",
+        note: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("allows an approval with no note", async () => {
+    const [pending] = await review.listLeaveRequests(adminActor(), { status: "PENDING" });
+
+    const decided = await review.decideLeaveRequest(adminActor(), pending.id, {
+      decision: "APPROVED",
+      note: null,
+    });
+
+    expect(decided).toMatchObject({ status: "APPROVED", decisionNote: null });
+  });
+
+  it("hides another organization's request behind a 404", async () => {
+    await clearRequests();
+    const filed = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-11-30",
+      endDate: "2026-12-01",
+      reason: null,
+    });
+    const foreignAdmin: Actor = {
+      id: "other-admin",
+      role: Role.ADMIN,
+      organizationId: otherOrgId,
+    };
+
+    await expect(
+      review.decideLeaveRequest(foreignAdmin, filed.id, {
+        decision: "APPROVED",
+        note: null,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    expect(await review.findLeaveRequest(foreignAdmin, filed.id)).toBeNull();
+  });
+
+  it("refuses an admin their own request", async () => {
+    const adminActorValue = adminActor();
+    const own = await service.createOwnLeaveRequest(adminActorValue, {
+      policyId: casualId,
+      startDate: "2026-12-07",
+      endDate: "2026-12-08",
+      reason: "Mine",
+    });
+
+    await expect(
+      review.decideLeaveRequest(adminActorValue, own.id, {
+        decision: "APPROVED",
+        note: null,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+
+    await prisma.leaveRequest.delete({ where: { id: own.id } });
+  });
+
+  it("returns the days to the applicant's balance on a rejection", async () => {
+    await clearRequests();
+    const filed = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-12-14",
+      endDate: "2026-12-16",
+      reason: null,
+    });
+
+    const held = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
+    expect(held.balances[0]).toMatchObject({ used: 3 });
+
+    await review.decideLeaveRequest(adminActor(), filed.id, {
+      decision: "REJECTED",
+      note: "Year end freeze.",
+    });
+
+    const freed = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
+    expect(freed.balances[0]).toMatchObject({ used: 0, balance: 6 });
+  });
+});
+
+describe("the applicant's balance, as the approver sees it", () => {
+  it("agrees with the member's own summary for the same date", async () => {
+    await clearRequests();
+    await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-12-21",
+      endDate: "2026-12-22",
+      reason: null,
+    });
+
+    const mine = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
+    const theirs = await review.leaveSummaryFor(adminActor(), memberId, "2026-12-31");
+
+    expect(theirs.balances).toEqual(mine.balances);
+    expect(theirs.year).toBe(mine.year);
+  });
+
+  it("refuses a member asking about anybody, including themselves", async () => {
+    await expect(
+      review.leaveSummaryFor(memberActor(), memberId, "2026-12-31"),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("refuses an admin asking about another organization's member", async () => {
+    const foreignAdmin: Actor = {
+      id: "other-admin",
+      role: Role.ADMIN,
+      organizationId: otherOrgId,
+    };
+
+    await expect(
+      review.leaveSummaryFor(foreignAdmin, memberId, "2026-12-31"),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("withdrawing one's own request", () => {
+  it("withdraws a pending request and returns its days", async () => {
+    await clearRequests();
+    const filed = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-12-28",
+      endDate: "2026-12-29",
+      reason: null,
+    });
+
+    const withdrawn = await service.withdrawOwnLeaveRequest(memberActor(), filed.id);
+    expect(withdrawn.status).toBe("WITHDRAWN");
+
+    const summary = await service.listOwnLeaveSummary(memberActor(), "2026-12-31");
+    expect(summary.balances[0]).toMatchObject({ used: 0, balance: 6 });
+  });
+
+  it("refuses to withdraw a decided request", async () => {
+    await clearRequests();
+    const filed = await service.createOwnLeaveRequest(memberActor(), {
+      policyId: casualId,
+      startDate: "2026-12-30",
+      endDate: "2026-12-31",
+      reason: null,
+    });
+    await review.decideLeaveRequest(adminActor(), filed.id, {
+      decision: "APPROVED",
+      note: null,
+    });
+
+    await expect(
+      service.withdrawOwnLeaveRequest(memberActor(), filed.id),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("returns a 404 for somebody else's request", async () => {
+    const [any] = await review.listLeaveRequests(adminActor(), { status: "APPROVED" });
+    const managerActor: Actor = {
+      id: managerId,
+      role: Role.MEMBER,
+      organizationId: orgId,
+    };
+
+    await expect(
+      service.withdrawOwnLeaveRequest(managerActor, any.id),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });
