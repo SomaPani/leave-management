@@ -2,11 +2,11 @@ import { ApplyForm, type ApplyOption } from "@/components/apply-form";
 import { PageHeader } from "@/components/page-header";
 import { EmptyPanel } from "@/components/ui";
 import { todayIso } from "@/lib/attendance";
-import { addDays, formatRange } from "@/lib/date";
+import { addDays } from "@/lib/date";
 import { listHolidays } from "@/lib/holiday-service";
-import { chargeYear, offDates, unitNoun } from "@/lib/leave";
+import { chargeYear, offDates } from "@/lib/leave";
 import { submitLeaveRequestAction } from "@/lib/leave-actions";
-import { findOwnLeaveRequest, listOwnLeaveSummary } from "@/lib/leave-service";
+import { listOwnLeaveSummary } from "@/lib/leave-service";
 import { requirePageActor } from "@/lib/page-guards";
 
 /**
@@ -23,7 +23,7 @@ import { requirePageActor } from "@/lib/page-guards";
 export default async function ApplyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; submitted?: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const actor = await requirePageActor();
   const params = await searchParams;
@@ -38,12 +38,6 @@ export default async function ApplyPage({
     // year boundary would be wrong exactly when it matters most.
     listHolidays(actor, { from: `${year}-01-01`, to: `${year + 1}-12-31` }),
   ]);
-
-  // Self-scoped: an id belonging to somebody else comes back as null and the
-  // strip simply does not render.
-  const submitted = params.submitted
-    ? await findOwnLeaveRequest(actor, params.submitted)
-    : null;
 
   const options: ApplyOption[] = summary.balances.map((policy) => ({
     id: policy.id,
@@ -61,15 +55,6 @@ export default async function ApplyPage({
         subtitle="Two weeks' notice for anything over five days."
         meta="MEMBER VIEW"
       />
-
-      {submitted ? (
-        <p className="rounded-lg border border-brand-tint bg-brand-tint px-3.5 py-2.5 text-sm text-brand-dark">
-          Request filed — {submitted.policy.name},{" "}
-          {formatRange(submitted.startDate, submitted.endDate)}, {submitted.cost}{" "}
-          {unitNoun(submitted.policy.unit, submitted.cost)}. It is with{" "}
-          {submitted.approver?.name ?? "your admin"} now.
-        </p>
-      ) : null}
 
       {params.error ? (
         <p className="rounded-lg border border-danger-line bg-danger-tint px-3.5 py-2.5 text-sm text-danger">

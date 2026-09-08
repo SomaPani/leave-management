@@ -10,7 +10,7 @@ import type { Actor } from "@/lib/rbac";
  * function over `FormData`, so it is called directly. `redirect` and
  * `revalidatePath` are stubbed — the first records where the action sent the
  * caller and throws the way the real one does, which is how success
- * (`?submitted=`) and failure (`?error=`) are both asserted.
+ * (`/requests?r=`) and failure (`?error=`) are both asserted.
  */
 
 const { actorRef, nav } = vi.hoisted(() => ({
@@ -144,8 +144,8 @@ describe("submitting a leave request", () => {
     });
 
     expect(stored).toMatchObject({ cost: 3, status: "PENDING" });
-    expect(url).toBe(`/apply?submitted=${stored?.id}`);
-    expect(nav.revalidated).toContain("/apply");
+    expect(url).toBe(`/requests?r=${stored?.id}`);
+    expect(nav.revalidated).toContain("/requests");
   });
 
   it("treats a disabled To field — which submits nothing — as a one-day request", async () => {

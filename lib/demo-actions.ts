@@ -13,23 +13,14 @@ import { redirect } from "next/navigation";
  *
  * Attendance has left: it is backed by `orgapp.Attendance` and writes through
  * lib/attendance-actions.ts. Team left before it, then the holiday calendar,
- * and now Apply — see lib/leave-actions.ts. The rest go the same way: each
- * needs a real data source first, not a different action.
+ * then Apply, and now the approvals loop — /approvals and /requests both write
+ * through lib/leave-actions.ts. The rest go the same way: each needs a real
+ * data source first, not a different action.
  */
 
 function text(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value : "";
-}
-
-/* ------------------------------------------------------------ approvals -- */
-
-export async function demoReviewRequest(form: FormData): Promise<void> {
-  const requestId = text(form, "requestId");
-  const filter = text(form, "filter") || "pending";
-  const intent = text(form, "intent") || "comment";
-
-  redirect(`/approvals?filter=${filter}&r=${requestId}&demo=${intent}`);
 }
 
 /* ----------------------------------------------------------------- team -- */
@@ -39,11 +30,6 @@ export async function demoAddTeamMember(): Promise<void> {
 }
 
 /* --------------------------------------------------------------- member -- */
-
-export async function demoUpdateOwnRequest(form: FormData): Promise<void> {
-  const requestId = text(form, "requestId");
-  redirect(`/requests?${requestId ? `r=${requestId}&` : ""}demo=reply`);
-}
 
 export async function demoUploadDocuments(): Promise<void> {
   redirect("/profile?demo=upload");

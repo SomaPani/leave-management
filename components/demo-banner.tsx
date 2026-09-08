@@ -4,14 +4,10 @@
  */
 
 const MESSAGES: Record<string, string> = {
-  approve: "the approval was not saved.",
-  reject: "the rejection was not saved.",
-  comment: "the comment was not saved.",
   add: "the new team member was not saved.",
   policy: "the policy change was not saved.",
   wfh: "the work-from-home policy change was not saved.",
   rule: "the approval rule was not saved.",
-  reply: "the reply was not saved.",
   upload: "the document was not uploaded.",
   remove: "the document was not removed.",
 };

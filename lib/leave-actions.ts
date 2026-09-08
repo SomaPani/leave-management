@@ -41,11 +41,10 @@ export async function submitLeaveRequestAction(form: FormData): Promise<void> {
     backWithError("/apply", error);
   }
 
-  // Land back on /apply naming the new request rather than on /requests: that
-  // screen is still on the fixture and would show a stranger's thread instead
-  // of the filing just made.
-  revalidatePath("/apply");
-  redirect(`/apply?submitted=${id}`);
+  // /requests is real now, so the filing lands where the member will look for
+  // it again — beside every other request they have made, with its status.
+  revalidatePath("/requests");
+  redirect(`/requests?r=${id}`);
 }
 
 /**

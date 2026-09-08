@@ -1,9 +1,6 @@
 import { LeaveRequestStatus } from "@/generated/prisma/enums";
 import type { AttendanceCode } from "@/lib/attendance";
-import type {
-  AttendanceCode as LegacyAttendanceCode,
-  RequestStatus,
-} from "@/lib/types";
+import type { AttendanceCode as LegacyAttendanceCode } from "@/lib/types";
 
 /**
  * Presentation tokens for the two data-driven colour scales in the design.
@@ -23,28 +20,6 @@ export const STATUS_STYLE: Record<
   APPROVED: { label: "APPROVED", className: "bg-[#dcfce7] text-[#16a34a]" },
   REJECTED: { label: "REJECTED", className: "bg-[#fee2e2] text-[#dc2626]" },
   WITHDRAWN: { label: "WITHDRAWN", className: "bg-[#efeeea] text-muted" },
-};
-
-/**
- * The fixture screens' status palette, keyed by the lowercase union in
- * lib/types.ts. Deleted when those screens move to real data; `STATUS_STYLE`
- * above is the one keyed by the database enum.
- *
- * Kept as a separate map rather than casting one union to the other at a call
- * site: the two happen to spell the same four states today, so a cast would
- * compile, and a fixture status with no database counterpart would then reach
- * `STATUS_STYLE[status]` as `undefined` and crash on `.className`. Two maps
- * make that a type error instead. Same reasoning, and the same shape, as
- * `LEGACY_ATTENDANCE_STYLE` below.
- */
-export const LEGACY_STATUS_STYLE: Record<
-  RequestStatus,
-  { label: string; className: string }
-> = {
-  pending: STATUS_STYLE.PENDING,
-  approved: STATUS_STYLE.APPROVED,
-  rejected: STATUS_STYLE.REJECTED,
-  withdrawn: STATUS_STYLE.WITHDRAWN,
 };
 
 /**

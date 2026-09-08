@@ -1,41 +1,49 @@
 import Link from "next/link";
 
-import { DemoBanner } from "@/components/demo-banner";
+import { LeaveRequestStatus } from "@/generated/prisma/enums";
 import { PageHeader } from "@/components/page-header";
-import { RequestThread } from "@/components/request-thread";
-import {
-  Card,
-  EmptyPanel,
-  LegacyStatusBadge,
-  primaryButtonClass,
-  textareaClass,
-} from "@/components/ui";
-import { demoUpdateOwnRequest as updateOwnRequest } from "@/lib/demo-actions";
+import { Card, EmptyPanel, MonoLabel, StatusBadge } from "@/components/ui";
 import { formatRange } from "@/lib/date";
-import { dayCountLabel, requestDays, requestsFor } from "@/lib/domain";
-import { demoDb, demoMember } from "@/lib/demo-data";
+import { unitNoun } from "@/lib/leave";
+import { withdrawOwnRequestAction } from "@/lib/leave-actions";
+import { listOwnLeaveRequests } from "@/lib/leave-service";
+import { requirePageActor } from "@/lib/page-guards";
 
+/**
+ * Member: every request this person has filed, and what became of it.
+ *
+ * Self-scoped, like /apply and /calendar: `listOwnLeaveRequests` takes no user
+ * id at all — the applicant is the session — so there is no id in the URL for
+ * a member to change into a colleague's.
+ *
+ * The approver's decision note takes the place of the fixture's feedback
+ * thread. A real back-and-forth needs a table, and there isn't one; a single
+ * recorded reason is what a decision actually carries today.
+ */
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ r?: string; demo?: string }>;
+  searchParams: Promise<{ r?: string; error?: string }>;
 }) {
+  const actor = await requirePageActor();
   const params = await searchParams;
 
-  const db = demoDb();
-  const user = demoMember(db);
-  const mine = requestsFor(db, user.id);
+  const mine = await listOwnLeaveRequests(actor);
   const selected = mine.find((request) => request.id === params.r) ?? mine[0] ?? null;
 
   return (
     <>
       <PageHeader
         title="My requests"
-        subtitle="Every request and its feedback thread."
+        subtitle="Every request you have filed, and what became of it."
         meta="MEMBER VIEW"
       />
 
-      <DemoBanner action={params.demo} />
+      {params.error ? (
+        <p className="rounded-lg border border-danger-line bg-danger-tint px-3.5 py-2.5 text-sm text-danger">
+          {params.error}
+        </p>
+      ) : null}
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <Card className="overflow-hidden">
@@ -49,13 +57,15 @@ export default async function RequestsPage({
                   active ? "bg-brand-tint" : "bg-surface hover:bg-subtle"
                 }`}
               >
-                <span className="text-sm font-semibold text-ink">{request.type}</span>
-                <LegacyStatusBadge status={request.status} />
+                <span className="text-sm font-semibold text-ink">
+                  {request.policy.name}
+                </span>
+                <StatusBadge status={request.status} />
                 <span className="font-mono text-[13px] text-ink-2">
-                  {formatRange(request.from, request.to)}
+                  {formatRange(request.startDate, request.endDate)}
                 </span>
                 <span className="text-[13px] text-muted">
-                  {dayCountLabel(requestDays(request))}
+                  {request.cost} {unitNoun(request.policy.unit, request.cost)}
                 </span>
               </Link>
             );
@@ -63,7 +73,7 @@ export default async function RequestsPage({
 
           {mine.length === 0 ? (
             <div className="px-4 py-11 text-center text-sm text-muted">
-              No requests yet.
+              No requests yet — file one from Apply for leave.
             </div>
           ) : null}
         </Card>
@@ -72,58 +82,47 @@ export default async function RequestsPage({
           <Card className="sticky top-6 flex flex-col gap-4.5 p-5.5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[17px] font-semibold">
-                {selected.type} · {formatRange(selected.from, selected.to)}
+                {selected.policy.name} ·{" "}
+                {formatRange(selected.startDate, selected.endDate)}
               </h2>
-              <LegacyStatusBadge status={selected.status} />
+              <StatusBadge status={selected.status} />
             </div>
 
             <p className="text-sm leading-relaxed text-ink text-pretty">
-              {selected.reason}
+              {selected.reason ?? "No reason given."}
             </p>
 
-            <div className="max-h-64 overflow-auto border-t border-line pt-4">
-              <RequestThread
-                messages={selected.thread}
-                viewerIsAdmin={false}
-                memberName={user.name}
-                emptyText="No feedback yet — you'll be notified here."
-              />
-            </div>
-
-            <form action={updateOwnRequest} className="flex flex-col gap-3">
-              <input type="hidden" name="requestId" value={selected.id} />
-
-              <div className="flex gap-2">
-                <textarea
-                  name="note"
-                  rows={2}
-                  placeholder="Reply to your admin…"
-                  className={`${textareaClass} flex-1`}
-                />
+            {selected.status === LeaveRequestStatus.PENDING ? (
+              <form action={withdrawOwnRequestAction} className="border-t border-line pt-4">
+                <input type="hidden" name="requestId" value={selected.id} />
+                <p className="mb-3 text-[13px] text-muted">
+                  With {selected.approver?.name ?? "your admin"} now.
+                </p>
                 <button
                   type="submit"
-                  name="intent"
-                  value="comment"
-                  className={`${primaryButtonClass} self-stretch px-4.5`}
-                >
-                  Reply
-                </button>
-              </div>
-
-              {selected.status === "pending" ? (
-                <button
-                  type="submit"
-                  name="intent"
-                  value="withdraw"
                   className="w-full cursor-pointer rounded-lg border border-line bg-surface px-3 py-2.5 text-[13px] text-danger transition-colors hover:bg-danger-tint"
                 >
                   Withdraw request
                 </button>
-              ) : null}
-            </form>
+              </form>
+            ) : (
+              <div className="flex flex-col gap-2 border-t border-line pt-4">
+                <MonoLabel>DECISION</MonoLabel>
+                <p className="text-[13px] text-muted">
+                  {selected.status === LeaveRequestStatus.WITHDRAWN
+                    ? "You took this back."
+                    : `${selected.approver?.name ?? "Your admin"} decided this.`}
+                </p>
+                {selected.decisionNote ? (
+                  <p className="text-sm leading-relaxed text-ink text-pretty">
+                    {selected.decisionNote}
+                  </p>
+                ) : null}
+              </div>
+            )}
           </Card>
         ) : (
-          <EmptyPanel>Select a request to see its feedback thread.</EmptyPanel>
+          <EmptyPanel>Select a request to see what became of it.</EmptyPanel>
         )}
       </div>
     </>
