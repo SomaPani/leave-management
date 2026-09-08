@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Date:** 2026-09-07
-**Status:** Proposed plan (pre-implementation)
+**Status:** Implemented
 **Goal:** Close the loop `/apply` opens. A `LeaveRequest` filed today is written to Postgres and read by nothing; this puts `/approvals` and `/requests` on that table and makes Approve, Reject and Withdraw persist.
 
 **Architecture:** Three nullable decision columns on the existing `LeaveRequest` — no new table. Roster-scoped reads and the decision write go in a **new** `lib/leave-review-service.ts`, because `lib/leave-service.ts` declares itself self-scoped with no `userId` parameter anywhere in it and that claim is what makes it reviewable. Authorization is two new pure predicates in `lib/rbac.ts`. The balance the approvals panel needs and the balance `/apply` already shows are extracted to one shared internal function so the two screens cannot disagree.
@@ -1879,7 +1879,7 @@ git commit -m "Put the approvals queue on the organization's real requests"
 - Consumes: `listOwnLeaveRequests`, `findOwnLeaveRequest` (existing); `withdrawOwnRequestAction` (Task 4); `StatusBadge` (Task 5).
 - Produces: nothing further.
 
-- [ ] **Step 1: Rewrite `/requests`, and retire the legacy badge**
+- [x] **Step 1: Rewrite `/requests`, and retire the legacy badge**
 
 This page is the last consumer of the fixture's lowercase status, so once it
 reads `listOwnLeaveRequests` its status is already a `LeaveRequestStatus`.
@@ -2017,7 +2017,7 @@ export default async function RequestsPage({
 }
 ```
 
-- [ ] **Step 2: Show the reason, not just the status**
+- [x] **Step 2: Show the reason, not just the status**
 
 `decisionNote` is already on `LeaveRequestRecord` from Task 3 Step 3, so the member's own read carries it. Render it in the decided branch of the panel above, after the `<p>`:
 
@@ -2031,7 +2031,7 @@ export default async function RequestsPage({
 
 A rejected request the member can see but cannot read the reason for is the fixture's silence wearing a real status.
 
-- [ ] **Step 3: Send a new filing to `/requests`**
+- [x] **Step 3: Send a new filing to `/requests`**
 
 `submitLeaveRequestAction` in `lib/leave-actions.ts` lands on `/apply?submitted=<id>` and says why in a comment: *"`/requests` is still on the fixture in this scope, so redirecting there would show a stranger's thread instead of the filing just made."* That reason expires here.
 
@@ -2042,7 +2042,7 @@ A rejected request the member can see but cannot read the reason for is the fixt
   redirect(`/requests?r=${id}`);
 ```
 
-- [ ] **Step 4: Remove the confirmation strip from `/apply`, and delete the demo stand-ins**
+- [x] **Step 4: Remove the confirmation strip from `/apply`, and delete the demo stand-ins**
 
 Deferred here from Task 4 Step 6, because this is where the last caller goes.
 From `lib/demo-actions.ts`, delete `demoReviewRequest` (with its
@@ -2064,16 +2064,20 @@ Then, in `app/(member)/apply/page.tsx`:
 
 In `app/(member)/apply/page.tsx`, delete the `submitted` block, the `findOwnLeaveRequest` call and its import, the `formatRange` and `unitNoun` imports if now unused, and drop `submitted` from the `searchParams` type. The `?error=` strip stays — `backWithError` still sends failures there.
 
-- [ ] **Step 5: Fix the action test that asserted the old redirect**
+- [x] **Step 5: Fix the action test that asserted the old redirect**
 
 `tests/leave-actions.test.ts` asserts `?submitted=` on the success path. Update that expectation:
 
 ```ts
-    expect(nav.redirectedTo).toMatch(/^\/requests\?r=/);
+    expect(url).toBe(`/requests?r=${stored?.id}`);
     expect(nav.revalidated).toContain("/requests");
 ```
 
-- [ ] **Step 6: Run everything**
+Kept as an exact match on the stored id rather than the `toMatch(/^\/requests\?r=/)`
+this step first specified: the test is named *"writes the row and comes back
+with its id"*, and a prefix regex would stop proving the half after the comma.
+
+- [x] **Step 6: Run everything**
 
 ```bash
 npx tsc --noEmit && npm run lint && npm test
@@ -2081,7 +2085,7 @@ npx tsc --noEmit && npm run lint && npm test
 
 Expected: all clean. `LeaveRequestRecord` gained two fields, so any stale spread shows up here.
 
-- [ ] **Step 7: Verify by hand**
+- [x] **Step 7: Verify by hand**
 
 ```bash
 npm run dev
@@ -2089,7 +2093,7 @@ npm run dev
 
 As a member: file a request and confirm you land on `/requests` with it selected and PENDING. Withdraw it; confirm the status and that `/apply` shows the days back. File another, decide it as an admin with a note, and confirm the member sees the status **and the note**. Confirm the Withdraw button is gone once decided.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add "app/(member)/requests/page.tsx" "app/(member)/apply/page.tsx" \
