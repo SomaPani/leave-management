@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
+import { LeaveRequestStatus } from "@/generated/prisma/enums";
 import { STATUS_STYLE } from "@/lib/ui";
-import type { RequestStatus } from "@/lib/types";
 
 /* Shared class strings, so form controls look identical everywhere. */
 
@@ -74,15 +74,18 @@ export function Avatar({
   );
 }
 
-export function StatusBadge({ status }: { status: RequestStatus }) {
-  const style = STATUS_STYLE[status];
+function Badge({ label, className }: { label: string; className: string }) {
   return (
     <span
-      className={`rounded-md px-2 py-[3px] font-mono text-[11px] tracking-[0.08em] ${style.className}`}
+      className={`rounded-md px-2 py-[3px] font-mono text-[11px] tracking-[0.08em] ${className}`}
     >
-      {style.label}
+      {label}
     </span>
   );
+}
+
+export function StatusBadge({ status }: { status: LeaveRequestStatus }) {
+  return <Badge {...STATUS_STYLE[status]} />;
 }
 
 /** Dashed "nothing selected" placeholder. */

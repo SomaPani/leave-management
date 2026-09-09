@@ -1,0 +1,425 @@
+// Data model for the multi-tenant organization backbone.
+//
+// These models live in the `orgapp` Postgres schema, set by the `schema`
+// parameter on the connection URL — see lib/prisma-url.ts. Prisma manages this
+// schema and nothing else in the database.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  MEMBER
+}
+
+/// Where a team member works from. Absent until an admin sets it.
+enum WorkMode {
+  WFO
+  WFH
+}
+
+/// Whether a member is still on the team. Removal is a status change, not a
+/// delete: leave and attendance rows will reference these users, and deleting
+/// a person would take their history with them.
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// The base state of an attendance day. Exactly one applies.
+enum AttendanceStatus {
+  PRESENT
+  WFH
+  ABSENT
+  LEAVE
+}
+
+/// An add-on to a day that was partly worked. Only ever set alongside PRESENT
+/// or WFH, and only one at a time — enforced by the column shape plus a CHECK
+/// constraint in the migration, not by application code alone.
+enum AttendanceModifier {
+  HALF_DAY
+  SHORT_LEAVE
+}
+
+/// How a leave policy is counted. `DAYS` charges working days in the range;
+/// `USES` charges one occurrence however long the range is — the rule the
+/// fixture expressed by matching the literal name "Short leave".
+enum LeaveUnit {
+  DAYS
+  USES
+}
+
+/// How a policy's entitlement arrives.
+enum LeaveAccrual {
+  /// The whole year's share at once, on 1 January or the accrual start.
+  UPFRONT
+  /// One-twelfth on the first of each month.
+  MONTHLY
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+model Organization {
+  id String @id @default(cuid())
+
+  // Unique so the seed can upsert by name and re-run without duplicating.
+  name      String   @unique
+  createdAt DateTime @default(now())
+  users     User[]
+  regions   Region[]
+
+  attendance       Attendance[]
+  attendanceEvents AttendanceEvent[]
+  holidays         Holiday[]
+
+  leavePolicies LeavePolicy[]
+  leaveRequests LeaveRequest[]
+}
+
+/// An office/location a team is grouped by on the Team screen.
+///
+/// Scoped to one organization rather than global, so two organizations can each
+/// have a "Chennai" without sharing a row.
+model Region {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users          User[]
+  holidays       Holiday[]
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model User {
+  id           String @id @default(cuid())
+  name         String
+  email        String @unique
+  passwordHash String
+  role         Role
+
+  // Null ONLY for SUPERADMIN; required for ADMIN and MEMBER. Enforced in
+  // application logic (lib/rbac.ts) — the column itself has to stay nullable
+  // to allow the SuperAdmin row.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  // Audit: who created this user. Null for CLI-created SuperAdmins.
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  // --- Team profile ---------------------------------------------------------
+  //
+  // Every field below is optional: they describe a MEMBER on the Team screen,
+  // and a SUPERADMIN legitimately has none of them. `status` is the exception —
+  // it always has an answer, so it defaults rather than being nullable.
+  //
+  // `initials` is deliberately absent: it is derived from `name` by
+  // `initialsFor()` in lib/domain.ts, and a stored copy would drift on rename.
+
+  title    String?
+  empId    String?
+  joinedOn DateTime?
+  workMode WorkMode?
+  status   EmploymentStatus @default(ACTIVE)
+
+  regionId String?
+  region   Region? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+
+  // The reporting line, as a reference rather than the fixture's name string,
+  // so renaming a manager cannot orphan it. Validated to be inside the same
+  // organization in lib/services.ts — the database cannot express that.
+  managerId String?
+  manager   User?   @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports   User[]  @relation("UserManager")
+
+  // Two relations to Attendance, so both have to be named: the days that are
+  // about this person, and the days this person recorded for someone else.
+  attendance       Attendance[] @relation("AttendanceSubject")
+  attendanceMarked Attendance[] @relation("AttendanceMarkedBy")
+
+  // Three relations now, for the same reason: the requests this person filed,
+  // the requests routed to them for a decision, and the ones they actually
+  // decided. The last two differ routinely — any admin in the organization
+  // may decide a request, not only the one it was routed to.
+  leaveRequests  LeaveRequest[] @relation("LeaveRequestSubject")
+  leaveApprovals LeaveRequest[] @relation("LeaveRequestApprover")
+  leaveDecisions LeaveRequest[] @relation("LeaveRequestDecider")
+
+  phone          String?
+  personalEmail  String?
+  address        String?
+  emergencyName  String?
+  emergencyPhone String?
+
+  // Employee ids are unique per organization, not globally. Postgres treats
+  // NULLs as distinct, so members without one do not collide.
+  @@unique([organizationId, empId])
+  @@index([organizationId])
+  @@index([regionId])
+}
+
+/// One member's attendance on one day.
+///
+/// The absence of a row is what "not marked yet" is stored as — there is no
+/// UNMARKED status, so clearing a day is a delete and "how many are unmarked"
+/// is roster size minus row count.
+///
+/// `organizationId` is denormalised from the member's own `User` row so the
+/// screen's hottest query — every mark in one organization on one day — is a
+/// single indexed read with no join. lib/attendance-service.ts always copies it
+/// from the stored user, never from a request body.
+model Attendance {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation("AttendanceSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Stored as DATE, not a timestamp: a day has no time and no offset.
+  date DateTime @db.Date
+
+  status   AttendanceStatus
+  modifier AttendanceModifier?
+
+  /// Who last wrote this row. The full history is in AttendanceEvent.
+  ///
+  /// Nullable, and SetNull rather than Restrict, because this is attribution
+  /// rather than ownership: an admin who leaves is deleted, and neither
+  /// blocking that delete nor destroying the team's attendance with it is
+  /// acceptable. Null therefore means "the admin who marked this is gone", not
+  /// "nobody marked it" — the service always sets it. AttendanceEvent.actorId
+  /// keeps the original name either way, since it carries no foreign key.
+  markedById String?
+  markedBy   User?   @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The natural key. Also the index behind every per-member read.
+  @@unique([userId, date])
+  @@index([organizationId, date])
+}
+
+/// Append-only log of every attendance write. Never updated, never deleted
+/// except with its organization.
+///
+/// This is what makes unlimited backdating safe: a correction made three months
+/// late is traceable rather than prevented.
+///
+/// `userId` and `actorId` are plain columns rather than relations on purpose —
+/// an audit row has to outlive the rows it describes. `organizationId` keeps
+/// its foreign key so the log is removed with the organization it belongs to.
+model AttendanceEvent {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// The member the mark is about.
+  userId String
+  date   DateTime @db.Date
+
+  /// `from*` null means the day had no row; `to*` null means it was cleared.
+  fromStatus   AttendanceStatus?
+  fromModifier AttendanceModifier?
+  toStatus     AttendanceStatus?
+  toModifier   AttendanceModifier?
+
+  /// The admin who made the change.
+  actorId String
+  at      DateTime @default(now())
+
+  @@index([organizationId, date])
+  @@index([userId, date])
+}
+
+/// A public holiday for one organization, optionally narrowed to one region.
+///
+/// The range is inclusive and stored as two DATE columns rather than a start
+/// plus a day count: "which holidays touch September" is then one indexed
+/// predicate instead of an expansion in application code, which is what
+/// `holidayDateMap()` has to do with the fixture today.
+///
+/// A null `regionId` means the holiday applies to every region in the
+/// organization — the same rule the fixture expresses by omitting `region`.
+model Holiday {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Null = every region in the organization.
+  regionId String?
+  region   Region? @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  name String
+
+  /// Inclusive. A single-day holiday has startDate == endDate.
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, startDate])
+  @@index([regionId])
+}
+
+/// A leave entitlement an organization grants, per calendar year.
+///
+/// Org-scoped rather than global — the same reasoning as `Region`: two
+/// organizations may both grant "Casual" without sharing a row, and one of
+/// them may grant eight days where the other grants six.
+model LeavePolicy {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name String
+  note String?
+
+  /// Working days per year for a DAYS policy; occurrences for a USES one.
+  allowance Int
+  unit      LeaveUnit @default(DAYS)
+
+  accrual LeaveAccrual @default(UPFRONT)
+
+  /// Whether a partial first year is scaled down. UPFRONT only; a MONTHLY
+  /// policy pro-rates inherently by crediting fewer months.
+  prorated Boolean @default(false)
+
+  /// Ceiling on a balance carried across a year boundary. Null means no
+  /// ceiling. Only meaningful when `carry` is true — a policy that lapses
+  /// has nothing to cap.
+  cap Int?
+
+  /// The day this entitlement starts existing — the scheme start. Per policy
+  /// rather than per organization, so a policy introduced later simply starts
+  /// later, with no separate concept to keep in step.
+  effectiveFrom DateTime @db.Date
+
+  /// Whether an unused balance survives 31 December. EL carries; CL and
+  /// Short leave lapse.
+  carry Boolean @default(false)
+
+  /// Render order in the Apply form's select. Ties break on name.
+  position Int @default(0)
+
+  /// A policy with requests against it is retired, not deleted — see the
+  /// `Restrict` on LeaveRequest.policyId. Inactive policies drop out of the
+  /// Apply select but keep every request they already priced readable.
+  active Boolean @default(true)
+
+  requests LeaveRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+/// One member's application for leave.
+///
+/// `organizationId` is denormalised from the applicant's own `User` row so the
+/// approvals queue — every request in one organization over a span — is a
+/// single indexed read with no join. lib/leave-service.ts always copies it
+/// from the stored user, never from a request body: the same rule
+/// lib/attendance-service.ts follows.
+model LeaveRequest {
+  id String @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("LeaveRequestSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// A reference, not the policy's name: renaming "Paid / annual" must not
+  /// orphan a year of requests. The same reasoning as `User.managerId`.
+  ///
+  /// Restrict, so a policy with history cannot be deleted out from under it.
+  /// Retiring a policy is `active = false`.
+  policyId String
+  policy   LeavePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  /// Inclusive. A USES request has startDate == endDate.
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+
+  /// Working days charged, computed at submit against weekends and the
+  /// applicant's region's holidays. Stored rather than derived: it is the
+  /// price frozen at submit, and a holiday added in November must not
+  /// re-price a request approved in September.
+  cost Int
+
+  reason String?
+
+  status LeaveRequestStatus @default(PENDING)
+
+  /// Who it went to at submit time — the applicant's manager, or an admin.
+  ///
+  /// Nullable and SetNull rather than Restrict, for the reason
+  /// `Attendance.markedById` gives: this is routing, not ownership. An
+  /// approver who leaves is deleted, and neither blocking that delete nor
+  /// destroying the team's leave history with it is acceptable.
+  approverId String?
+  approver   User?   @relation("LeaveRequestApprover", fields: [approverId], references: [id], onDelete: SetNull)
+
+  /// When the decision was made. Null while PENDING.
+  ///
+  /// Distinct from `updatedAt`, which moves for any write. Reading "when was
+  /// this approved" off `updatedAt` would be wrong the first time anything
+  /// else touches the row.
+  decidedAt DateTime?
+
+  /// The admin who approved or rejected it — not necessarily `approverId`,
+  /// which records who it was *routed* to at submit. Any admin in the
+  /// organization may decide, so the two differ routinely.
+  ///
+  /// Nullable and SetNull for the reason `approverId` and
+  /// `Attendance.markedById` give: this is attribution, not ownership. An
+  /// admin who leaves is deleted, and neither blocking that delete nor
+  /// destroying the organization's leave history with it is acceptable. Null
+  /// therefore means "the admin who decided this is gone", never "undecided" —
+  /// `status` and `decidedAt` are what answer that.
+  decidedById String?
+  decidedBy   User?   @relation("LeaveRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  /// Why. Required by the service on a rejection, optional on an approval.
+  /// Not enforced by a CHECK: it is a policy about one transition, not an
+  /// invariant of the row, and a future status could reasonably not want it.
+  decisionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The approvals queue: one organization, ordered by date.
+  @@index([organizationId, startDate])
+  /// The balance query and the overlap check: one member, filtered by status.
+  @@index([userId, status])
+  /// The approvals queue: one organization's requests in one state, oldest
+  /// filing first.
+  @@index([organizationId, status, createdAt])
+}

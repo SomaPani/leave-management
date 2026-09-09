@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: leave-management-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leave_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-leave_management}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # PG18 declares its volume at /var/lib/postgresql (PGDATA=/var/lib/postgresql/18/docker)
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leave} -d ${POSTGRES_DB:-leave_management}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
