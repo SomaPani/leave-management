@@ -222,11 +222,11 @@ Backfill needs no new code: `--recompute --days 30` re-runs the identical scorer
 ### 6.2 Two new predicates in `lib/rbac.ts`
 
 ```ts
-canReadOwnScores(actor)                     // MEMBER or ADMIN, in an organization
-canListScores(actor, organizationId)        // ADMIN in that org, or SUPERADMIN
+canReadOwnScores(actor)     // MEMBER or ADMIN, in an organization
+canListScores(actor)        // ADMIN or SUPERADMIN; scope with visibleOrgId(actor)
 ```
 
-Mirrors `canReadOwnAttendance` / `canListAttendance`. Ingest is deliberately **not** a predicate: it is not an actor, and giving a bearer token an `Actor` would let it flow into functions that assume a real user.
+Mirrors `canReadOwnAttendance` / `canListAttendance`. `canListScores` takes no organization id for the same reason `canListAttendance` does not: the predicate answers *may this actor list at all*, and `visibleOrgId` decides *whose*. Splitting it that way means an organization filter can never be forgotten in one branch and applied in another. Ingest is deliberately **not** a predicate: it is not an actor, and giving a bearer token an `Actor` would let it flow into functions that assume a real user.
 
 ### 6.3 A pure rules module — `lib/score.ts`
 
