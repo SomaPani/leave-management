@@ -70,15 +70,6 @@ export type LeaveRequest = {
 
 export type DocumentRecord = { id: string; name: string; size: number };
 
-export type ScoreCard = {
-  total: number;
-  grade: string;
-  /** `[label, percentage, detail]` */
-  metrics: [string, number, string][];
-  /** `[label, value]` */
-  ledger: [string, string][];
-};
-
 export type Db = {
   people: Person[];
   requests: LeaveRequest[];

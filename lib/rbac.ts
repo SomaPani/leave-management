@@ -259,6 +259,40 @@ export function canListAttendance(actor: Actor): boolean {
 }
 
 /**
+ * Reading your own score board.
+ *
+ * An admin is included deliberately, on the same reasoning as
+ * `canApplyForLeave`: an admin is a person, and the upstream pipeline scores
+ * whoever appears in the Slack roll-call regardless of their role here. A
+ * SuperAdmin belongs to no organization and appears in no roll-call, so there
+ * is nothing for them to read.
+ *
+ * There is no `userId` parameter, and the service takes none either: the
+ * subject of this read is the session, so a member has no way to name anybody
+ * else.
+ */
+export function canReadOwnScores(actor: Actor): boolean {
+  return actor.role !== Role.SUPERADMIN && actor.organizationId !== null;
+}
+
+/**
+ * Reading the whole organization's scores follows `canListAttendance`: a
+ * SuperAdmin sees every organization, so they may read the scores inside one.
+ * Scope the query with `visibleOrgId`.
+ *
+ * It takes no organization id for the same reason `canListAttendance` does
+ * not — this answers *may this actor list at all*, and `visibleOrgId` decides
+ * *whose*. Splitting it that way means the organization filter cannot be
+ * applied in one branch and forgotten in another.
+ *
+ * Nobody may *write* a score through a predicate: ingest is authenticated by a
+ * bearer token and has no Actor at all. See lib/score-service.ts.
+ */
+export function canListScores(actor: Actor): boolean {
+  return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
+}
+
+/**
  * Which organization a list request is scoped to: `null` means "every
  * organization" and is only ever returned for a SuperAdmin.
  */

@@ -105,10 +105,24 @@ export function EmptyPanel({
   );
 }
 
-export function Meter({ percent }: { percent: number }) {
+export function Meter({
+  percent,
+  label,
+}: {
+  percent: number;
+  /** What the meter is measuring, for a screen reader. */
+  label?: string;
+}) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
-    <span className="block h-[5px] overflow-hidden rounded bg-line">
+    <span
+      role="progressbar"
+      aria-valuenow={Math.round(clamped)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={label}
+      className="block h-[5px] overflow-hidden rounded bg-line"
+    >
       <span
         className="block h-[5px] rounded bg-brand"
         style={{ width: `${clamped}%` }}

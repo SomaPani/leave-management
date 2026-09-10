@@ -13,6 +13,7 @@ import {
   canDeleteMember,
   canDeleteOrganization,
   canListAttendance,
+  canListScores,
   canListHolidays,
   canListLeavePolicies,
   canListLeaveRequests,
@@ -23,6 +24,7 @@ import {
   canManageRegions,
   canMarkAttendance,
   canReadOwnAttendance,
+  canReadOwnScores,
   canReviewLeave,
   canUpdateAdmin,
   canUpdateMember,
@@ -392,5 +394,33 @@ describe("listing leave requests across a roster", () => {
 
   it("denies a member — /api/leave-requests stays self-scoped for them", () => {
     expect(canListLeaveRequests(memberA)).toBe(false);
+  });
+});
+
+describe("reading your own score board", () => {
+  it("allows a member", () => {
+    expect(canReadOwnScores(memberA)).toBe(true);
+  });
+
+  it("allows an admin — an admin is a person the pipeline scores too", () => {
+    expect(canReadOwnScores(adminA)).toBe(true);
+  });
+
+  it("denies a superadmin, who is in no organization and no roll-call", () => {
+    expect(canReadOwnScores(superadmin)).toBe(false);
+  });
+});
+
+describe("listing scores across a roster", () => {
+  it("allows an admin", () => {
+    expect(canListScores(adminA)).toBe(true);
+  });
+
+  it("allows a superadmin, mirroring canListAttendance", () => {
+    expect(canListScores(superadmin)).toBe(true);
+  });
+
+  it("denies a member — /score stays self-scoped for them", () => {
+    expect(canListScores(memberA)).toBe(false);
   });
 });

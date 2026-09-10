@@ -87,6 +87,8 @@ model Organization {
 
   leavePolicies LeavePolicy[]
   leaveRequests LeaveRequest[]
+
+  scores ScoreDay[]
 }
 
 /// An office/location a team is grouped by on the Team screen.
@@ -160,6 +162,11 @@ model User {
   leaveRequests  LeaveRequest[] @relation("LeaveRequestSubject")
   leaveApprovals LeaveRequest[] @relation("LeaveRequestApprover")
   leaveDecisions LeaveRequest[] @relation("LeaveRequestDecider")
+
+  // The daily performance scores pushed in from the Standup-Automation
+  // pipeline. Named, like the attendance relations above, because the
+  // application never writes them on anyone else's behalf.
+  scores ScoreDay[] @relation("ScoreSubject")
 
   phone          String?
   personalEmail  String?
@@ -422,4 +429,85 @@ model LeaveRequest {
   /// The approvals queue: one organization's requests in one state, oldest
   /// filing first.
   @@index([organizationId, status, createdAt])
+}
+
+enum ScoreStatus {
+  SCORED
+  NOT_SCORED
+}
+
+/// One member's performance score for one day, as computed upstream by the
+/// Standup-Automation pipeline and pushed here.
+///
+/// Never computed in this application: the rubric lives in that pipeline's
+/// `scorecard.py` and this is a read model of its output. There is no override
+/// column and no correction workflow — a wrong score is fixed by the upstream
+/// recompute pass re-pushing the day, which upserts on `[userId, date]`.
+///
+/// `organizationId` is denormalised from the member's own `User` row so the
+/// admin screen's hottest query — every score in one organization for one
+/// month — is a single indexed read with no join, exactly as `Attendance`
+/// does. lib/score-service.ts always copies it from the stored user, never
+/// from a request body.
+model ScoreDay {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation("ScoreSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Stored as DATE, not a timestamp: a day has no time and no offset.
+  date DateTime @db.Date
+
+  status ScoreStatus
+  /// Why a day was not scored — "jira: 503", "no roll-call posted for the day".
+  /// Null when SCORED.
+  reason String?
+  /// The upstream attendance label as reported: Present | Half Day | Absent |
+  /// Leave | Weekend | Holiday. Deliberately text rather than this
+  /// application's AttendanceStatus enum: it is the pipeline's reading of a
+  /// Slack roll-call, not a mark an admin made on /attendance, and conflating
+  /// the two would suggest one could be derived from the other.
+  attendance String
+
+  /// One column per check in the rubric. All nullable, and null is the point:
+  /// a NOT_SCORED day has no zeros for a later query to average by mistake.
+  /// Making that invariant structural beats trusting every future reader to
+  /// remember the filter.
+  checkinPts      Float?
+  pickedPts       Float?
+  descriptionPts  Float?
+  commitPts       Float?
+  commentPts      Float?
+  deliveryPts     Float?
+  /// The coordination bonus, awarded on top of the hundred.
+  coordinationPts Float?
+
+  process  Float?
+  delivery Float?
+  /// 0-110, not 0-100: the coordination bonus legitimately exceeds the
+  /// hundred, so there is deliberately no check constraint here.
+  total    Float?
+  band     String?
+
+  tasksPicked  Int?
+  tasksDone    Int?
+  tasksCredit  Float?
+  volumeFactor Float?
+
+  /// Jira keys frozen at capture, and the day's flags: unplanned_work,
+  /// half_day, no_tasks, under_committed, coordinated.
+  pickedTasks String[]
+  flags       String[]
+
+  /// From the scoring run that produced the row, not from our clock.
+  computedAt DateTime
+  receivedAt DateTime @default(now())
+
+  /// The upsert key. A re-push of the same day corrects it in place, which is
+  /// what carries the upstream recompute through to the screen.
+  @@unique([userId, date])
+  @@index([organizationId, date])
 }

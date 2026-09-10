@@ -7,7 +7,6 @@ import type {
   Person,
   Policy,
   Rule,
-  ScoreCard,
 } from "@/lib/types";
 
 export const COMPANY_NAME = "Stacx24";
@@ -88,126 +87,6 @@ export const PEOPLE: Person[] = [
 
 /** The three accounts offered on the sign-in screen. */
 export const DEMO_ACCOUNT_IDS = ["u1", "u2", "u3"];
-
-export const SCORES: Record<string, ScoreCard> = {
-  u2: {
-    total: 86,
-    grade: "Strong",
-    metrics: [
-      ["Attendance", 94, "182 of 194 working days"],
-      ["Punctuality", 88, "9 late arrivals"],
-      ["Leave discipline", 91, "1 unplanned absence"],
-      ["Utilisation", 76, "Billable vs. available"],
-    ],
-    ledger: [
-      ["Working days", "194"],
-      ["Days present", "182"],
-      ["WFH days", "21"],
-      ["Leave taken", "12 days"],
-      ["Half days", "4"],
-      ["Unplanned absence", "1"],
-    ],
-  },
-  u3: {
-    total: 79,
-    grade: "On track",
-    metrics: [
-      ["Attendance", 89, "173 of 194 working days"],
-      ["Punctuality", 74, "22 late arrivals"],
-      ["Leave discipline", 82, "3 unplanned absences"],
-      ["Utilisation", 84, "Billable vs. available"],
-    ],
-    ledger: [
-      ["Working days", "194"],
-      ["Days present", "173"],
-      ["WFH days", "34"],
-      ["Leave taken", "19 days"],
-      ["Half days", "6"],
-      ["Unplanned absence", "3"],
-    ],
-  },
-  u4: {
-    total: 92,
-    grade: "Excellent",
-    metrics: [
-      ["Attendance", 97, "188 of 194 working days"],
-      ["Punctuality", 95, "3 late arrivals"],
-      ["Leave discipline", 96, "None"],
-      ["Utilisation", 81, "Billable vs. available"],
-    ],
-    ledger: [
-      ["Working days", "194"],
-      ["Days present", "188"],
-      ["WFH days", "12"],
-      ["Leave taken", "6 days"],
-      ["Half days", "2"],
-      ["Unplanned absence", "0"],
-    ],
-  },
-  u5: {
-    total: 71,
-    grade: "Needs attention",
-    metrics: [
-      ["Attendance", 84, "163 of 194 working days"],
-      ["Punctuality", 68, "31 late arrivals"],
-      ["Leave discipline", 70, "5 unplanned absences"],
-      ["Utilisation", 62, "Billable vs. available"],
-    ],
-    ledger: [
-      ["Working days", "194"],
-      ["Days present", "163"],
-      ["WFH days", "41"],
-      ["Leave taken", "23 days"],
-      ["Half days", "9"],
-      ["Unplanned absence", "5"],
-    ],
-  },
-  u6: {
-    total: 88,
-    grade: "Strong",
-    metrics: [
-      ["Attendance", 93, "180 of 194 working days"],
-      ["Punctuality", 91, "6 late arrivals"],
-      ["Leave discipline", 89, "1 unplanned absence"],
-      ["Utilisation", 88, "Billable vs. available"],
-    ],
-    ledger: [
-      ["Working days", "194"],
-      ["Days present", "180"],
-      ["WFH days", "28"],
-      ["Leave taken", "14 days"],
-      ["Half days", "3"],
-      ["Unplanned absence", "1"],
-    ],
-  },
-};
-
-/** The member's own score board is a fixed placeholder in the design. */
-export const MY_SCORE = {
-  total: "86",
-  grade: "Strong",
-  note: "Placeholder figures — wired up once the real data source is connected.",
-  metrics: [
-    { label: "Attendance", value: "94%", detail: "182 of 194 working days", pct: 94 },
-    { label: "Punctuality", value: "88%", detail: "9 late arrivals this year", pct: 88 },
-    { label: "Leave discipline", value: "91%", detail: "1 unplanned absence", pct: 91 },
-    { label: "Utilisation", value: "76%", detail: "Billable vs. available hours", pct: 76 },
-  ],
-  quarters: [
-    { label: "Q1", value: 82 },
-    { label: "Q2", value: 88 },
-    { label: "Q3", value: 86 },
-    { label: "Q4", value: 0 },
-  ],
-  ledger: [
-    { label: "Working days", value: "194" },
-    { label: "Days present", value: "182" },
-    { label: "WFH days", value: "21" },
-    { label: "Leave taken", value: "12 days" },
-    { label: "Half days", value: "4" },
-    { label: "Unplanned absence", value: "1" },
-  ],
-};
 
 const POLICIES: Policy[] = [
   {
