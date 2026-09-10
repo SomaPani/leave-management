@@ -288,7 +288,7 @@ const SEED_LEAVE_POLICIES: {
   note: string;
   allowance: number;
   unit?: "USES";
-  accrual?: "MONTHLY";
+  accrual?: "MONTHLY" | "EARNED";
   prorated?: boolean;
   carry?: boolean;
   cap?: number;
@@ -312,6 +312,16 @@ const SEED_LEAVE_POLICIES: {
     note: "A couple of hours off. Counted per use, not per day.",
     allowance: 4,
     unit: "USES",
+  },
+  {
+    name: "Comp-off",
+    note: "A day off earned by working a weekend or a holiday. Claim the day you worked; the balance appears once an admin approves it.",
+    // Ignored for EARNED: credit is one day per approved CompOffClaim, so
+    // there is no yearly share to divide. `carry` stays false, which the
+    // LeavePolicy_earned_lapses CHECK requires - the credit lapses with the
+    // year it was earned in.
+    allowance: 0,
+    accrual: "EARNED",
   },
 ];
 

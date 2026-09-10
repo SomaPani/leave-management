@@ -120,7 +120,15 @@ export function unitNoun(unit: LeaveUnitName, count: number): string {
  * union rather than imported from the generated client, for the same
  * client-safety reason as `LeaveUnitName`.
  */
-export type LeaveAccrualName = "UPFRONT" | "MONTHLY";
+export type LeaveAccrualName = "UPFRONT" | "MONTHLY" | "EARNED";
+
+/**
+ * The default earned map, for every policy whose credit comes from a
+ * schedule. `NO_USAGE` in lib/leave-service.ts is the same thing for the
+ * other direction, and is not importable here without inverting the
+ * dependency between the two files.
+ */
+const NO_EARNED: ReadonlyMap<number, number> = new Map();
 
 /**
  * A policy's crediting configuration — everything the arithmetic below needs
@@ -128,7 +136,8 @@ export type LeaveAccrualName = "UPFRONT" | "MONTHLY";
  * `LeavePolicy` row.
  */
 export type CreditRule = {
-  /** Days (or uses) for a whole year. */
+  /** Days (or uses) for a whole year. Ignored by an EARNED rule, whose credit
+   * is one day per approved comp-off claim and has no yearly share. */
   allowance: number;
   accrual: LeaveAccrualName;
   /** UPFRONT only: scale a partial first year down. */
@@ -186,13 +195,26 @@ export function accrualStart(rule: CreditRule, joinedOn: string | null): string 
  * Not the same question as "what is this member entitled to this year": a
  * MONTHLY policy answers 1 on 4 September and 4 on 31 December for the same
  * year, because the days arrive one at a time.
+ *
+ * `earnedByYear` is comp-off credit, keyed by the year each day was worked in
+ * — see `earnedByYearFrom` in lib/comp-off.ts. It is only read for an EARNED
+ * rule, and defaults to empty so every scheduled policy's call site is
+ * unchanged.
  */
 export function creditedInYear(
   rule: CreditRule,
   joinedOn: string | null,
   year: number,
   asOf: string,
+  earnedByYear: ReadonlyMap<number, number> = NO_EARNED,
 ): number {
+  // Earned credit has no schedule: it exists because a day was worked, so
+  // neither the scheme start nor the member's join month bears on it, and
+  // there is no yearly share to prorate. A day earned in a member's first
+  // week is theirs. Returned before any of that arithmetic runs, rather than
+  // after it with the result discarded.
+  if (rule.accrual === "EARNED") return earnedByYear.get(year) ?? 0;
+
   const start = accrualStart(rule, joinedOn);
   const january = `${year}-01-01`;
   const december = `${year}-12-31`;
@@ -243,20 +265,24 @@ export function balanceAsOf(
   joinedOn: string | null,
   asOf: string,
   usedByYear: ReadonlyMap<number, number>,
+  earnedByYear: ReadonlyMap<number, number> = NO_EARNED,
 ): { credited: number; used: number; balance: number } {
   const year = chargeYear(asOf);
   const used = usedByYear.get(year) ?? 0;
-  const thisYear = creditedInYear(rule, joinedOn, year, asOf);
+  const thisYear = creditedInYear(rule, joinedOn, year, asOf, earnedByYear);
 
   if (!rule.carry) {
     return { credited: thisYear, used, balance: thisYear - used };
   }
 
+  // An EARNED rule cannot reach the walk below — the
+  // LeavePolicy_earned_lapses CHECK forbids it carrying — but the map is
+  // passed anyway rather than relying on that from a distance.
   let opening = 0;
   for (let y = chargeYear(accrualStart(rule, joinedOn)); y < year; y++) {
     const closing =
       opening +
-      creditedInYear(rule, joinedOn, y, `${y}-12-31`) -
+      creditedInYear(rule, joinedOn, y, `${y}-12-31`, earnedByYear) -
       (usedByYear.get(y) ?? 0);
     opening = rule.cap === null ? closing : Math.min(rule.cap, closing);
   }

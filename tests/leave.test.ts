@@ -374,3 +374,73 @@ describe("balanceAsOf — policies that carry", () => {
     });
   });
 });
+
+describe("an EARNED rule", () => {
+  const EARNED: CreditRule = {
+    allowance: 0,
+    accrual: "EARNED",
+    prorated: false,
+    carry: false,
+    cap: null,
+    effectiveFrom: "2026-01-01",
+  };
+
+  it("credits the approved claims of that year and nothing else", () => {
+    expect(creditedInYear(EARNED, null, 2026, "2026-09-15", new Map([[2026, 3]]))).toBe(3);
+  });
+
+  it("credits nothing in a year with no claims", () => {
+    expect(creditedInYear(EARNED, null, 2025, "2026-09-15", new Map([[2026, 3]]))).toBe(0);
+  });
+
+  it("ignores allowance entirely", () => {
+    const generous: CreditRule = { ...EARNED, allowance: 99 };
+    expect(creditedInYear(generous, null, 2026, "2026-09-15", new Map())).toBe(0);
+  });
+
+  it("ignores joinedOn - a day earned in the first week is still earned", () => {
+    expect(creditedInYear(EARNED, "2026-09-14", 2026, "2026-09-15", new Map([[2026, 1]]))).toBe(1);
+  });
+
+  it("ignores prorating", () => {
+    const prorated: CreditRule = { ...EARNED, allowance: 12, prorated: true };
+    expect(creditedInYear(prorated, "2026-09-01", 2026, "2026-12-31", new Map([[2026, 2]]))).toBe(2);
+  });
+
+  it("credits a day earned before the scheme start", () => {
+    // An EARNED rule has no accrual start to be before: the day was worked.
+    expect(creditedInYear(EARNED, null, 2025, "2025-12-31", new Map([[2025, 1]]))).toBe(1);
+  });
+
+  it("balances earned against used", () => {
+    expect(
+      balanceAsOf(EARNED, null, "2026-09-15", new Map([[2026, 1]]), new Map([[2026, 3]])),
+    ).toEqual({ credited: 3, used: 1, balance: 2 });
+  });
+
+  it("goes negative rather than refusing an over-spend, like every other policy", () => {
+    expect(
+      balanceAsOf(EARNED, null, "2026-09-15", new Map([[2026, 4]]), new Map([[2026, 1]])),
+    ).toEqual({ credited: 1, used: 4, balance: -3 });
+  });
+
+  it("does not carry last year's unspent credit into this one", () => {
+    const earned = new Map([
+      [2025, 5],
+      [2026, 1],
+    ]);
+    expect(balanceAsOf(EARNED, null, "2026-09-15", NO_USE, earned)).toEqual({
+      credited: 1,
+      used: 0,
+      balance: 1,
+    });
+  });
+
+  it("credits nothing when no earned map is passed at all", () => {
+    expect(balanceAsOf(EARNED, null, "2026-09-15", NO_USE)).toEqual({
+      credited: 0,
+      used: 0,
+      balance: 0,
+    });
+  });
+});

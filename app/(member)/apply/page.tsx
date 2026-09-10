@@ -1,10 +1,12 @@
 import { ApplyForm, type ApplyOption } from "@/components/apply-form";
+import { CompOffForm } from "@/components/comp-off-form";
 import { PageHeader } from "@/components/page-header";
 import { EmptyPanel } from "@/components/ui";
 import { todayIso } from "@/lib/attendance";
 import { addDays } from "@/lib/date";
 import { listHolidays } from "@/lib/holiday-service";
 import { chargeYear, offDates } from "@/lib/leave";
+import { submitCompOffClaimAction } from "@/lib/comp-off-actions";
 import { submitLeaveRequestAction } from "@/lib/leave-actions";
 import { listOwnLeaveSummary } from "@/lib/leave-service";
 import { requirePageActor } from "@/lib/page-guards";
@@ -48,6 +50,10 @@ export default async function ApplyPage({
 
   const approverName = summary.approver?.name ?? "your admin";
 
+  // The Comp-off policy, if this organization has one. Found by accrual rather
+  // than by name: renaming the policy must not silently remove the claim card.
+  const compOff = summary.balances.find((policy) => policy.accrual === "EARNED");
+
   return (
     <>
       <PageHeader
@@ -77,6 +83,22 @@ export default async function ApplyPage({
           defaultTo={addDays(today, 9)}
         />
       )}
+
+      {compOff ? (
+        <>
+          <PageHeader
+            title="Claim a comp-off"
+            subtitle="A day off earned by working a weekend or a holiday."
+            meta="MEMBER VIEW"
+          />
+          <CompOffForm
+            action={submitCompOffClaimAction}
+            holidayDates={[...offDates(holidays)]}
+            today={today}
+            balance={compOff.balance}
+          />
+        </>
+      ) : null}
     </>
   );
 }

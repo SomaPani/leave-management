@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { LeaveRequestStatus } from "@/generated/prisma/enums";
+import type { CompOffClaimStatus, LeaveRequestStatus } from "@/generated/prisma/enums";
 import { STATUS_STYLE } from "@/lib/ui";
 
 /* Shared class strings, so form controls look identical everywhere. */
@@ -84,7 +84,17 @@ function Badge({ label, className }: { label: string; className: string }) {
   );
 }
 
-export function StatusBadge({ status }: { status: LeaveRequestStatus }) {
+export function StatusBadge({
+  status,
+}: {
+  /**
+   * A leave request's status or a comp-off claim's. The two enums are
+   * deliberately separate — see the CompOffClaimStatus comment in the schema
+   * — but they carry the same four values, so they share one badge rather
+   * than two identical style maps.
+   */
+  status: LeaveRequestStatus | CompOffClaimStatus;
+}) {
   return <Badge {...STATUS_STYLE[status]} />;
 }
 

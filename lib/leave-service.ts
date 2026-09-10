@@ -1,12 +1,12 @@
 // Prisma 7 generates each enum as a const object plus a same-named type, so
 // one plain import gives both the values and the type.
 import {
-  EmploymentStatus,
   type LeaveAccrual,
   LeaveRequestStatus,
   type LeaveUnit,
-  Role,
 } from "@/generated/prisma/enums";
+import { type ApproverRecord, approverFor } from "@/lib/approver";
+import { earnedByYearFor } from "@/lib/comp-off-service";
 import { fromDbDate, toDbDate, todayIso } from "@/lib/attendance";
 import { listHolidays } from "@/lib/holiday-service";
 import {
@@ -122,7 +122,7 @@ export type LeaveBalanceRecord = LeavePolicyRecord & {
   balance: number;
 };
 
-export type ApproverRecord = { id: string; name: string } | null;
+export type { ApproverRecord } from "@/lib/approver";
 
 export type LeaveSummary = {
   /** The calendar year `asOf` falls in. */
@@ -223,27 +223,6 @@ function applicantOrgFor(actor: Actor): string {
   return organizationId;
 }
 
-/**
- * Who a request goes to: the applicant's manager, or failing that the
- * organization's longest-standing active admin, or nobody.
- *
- * A fallback rather than a requirement. A one-person organization and a member
- * whose manager has left are both real, and neither should leave somebody
- * unable to file at all.
- */
-async function approverFor(
-  manager: ApproverRecord,
-  organizationId: string,
-): Promise<ApproverRecord> {
-  if (manager) return manager;
-
-  return prisma.user.findFirst({
-    where: { organizationId, role: Role.ADMIN, status: EmploymentStatus.ACTIVE },
-    select: { id: true, name: true },
-    orderBy: { createdAt: "asc" },
-  });
-}
-
 /* --------------------------------------------------------------- reading -- */
 
 /**
@@ -325,7 +304,7 @@ export async function summaryFor(
   // sentence to show an admin who mistyped a member id.
   if (!applicant) throw new HttpError(404, "That member does not exist.");
 
-  const [policies, spent, approver] = await Promise.all([
+  const [policies, spent, approver, earned] = await Promise.all([
     // The policy list is the organization's, not the caller's, so an admin
     // reading a member's balance sees the entitlements that member is
     // actually measured against.
@@ -339,6 +318,11 @@ export async function summaryFor(
       select: { policyId: true, startDate: true, cost: true },
     }),
     approverFor(applicant.manager, organizationId),
+    // Comp-off credit: one day per approved claim, keyed by the year the day
+    // was worked in. Fetched unconditionally rather than only when the
+    // organization has an EARNED policy — the branch would save one small
+    // query on a member's own screen and is one more thing to get wrong.
+    earnedByYearFor(userId),
   ]);
 
   // policy id -> calendar year -> days spent.
@@ -359,7 +343,16 @@ export async function summaryFor(
     asOf,
     balances: policies.map((policy) => ({
       ...policy,
-      ...balanceAsOf(policy, joinedOn, asOf, usedByPolicy.get(policy.id) ?? NO_USAGE),
+      ...balanceAsOf(
+        policy,
+        joinedOn,
+        asOf,
+        usedByPolicy.get(policy.id) ?? NO_USAGE,
+        // Every EARNED policy in an organization draws on the same claims.
+        // There is one such policy today; a second would share this credit
+        // with the first, which is the moment to key claims by policy.
+        policy.accrual === "EARNED" ? earned : NO_USAGE,
+      ),
     })),
     approver,
   };
