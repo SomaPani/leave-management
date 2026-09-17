@@ -11,9 +11,8 @@ import {
   primaryButtonClass,
   textareaClass,
 } from "@/components/ui";
-import { formatRange } from "@/lib/date";
 import { initialsFor } from "@/lib/domain";
-import { unitNoun } from "@/lib/leave";
+import { formatWhen, unitNoun } from "@/lib/leave";
 import { reviewLeaveRequestAction } from "@/lib/leave-actions";
 import type { ReviewRequestRecord } from "@/lib/leave-review-service";
 import type { LeaveSummary } from "@/lib/leave-service";
@@ -88,7 +87,12 @@ export function ApprovalQueue({
                 </span>
                 <StatusBadge status={request.status} />
                 <span className="col-start-1 font-mono text-[13px] text-ink-2">
-                  {formatRange(request.startDate, request.endDate)}
+                  {formatWhen(
+                    request.startDate,
+                    request.endDate,
+                    request.startTime,
+                    request.endTime,
+                  )}
                 </span>
                 <span className="text-[13px] text-muted">
                   {request.cost} {unitNoun(request.policy.unit, request.cost)}
@@ -134,7 +138,12 @@ export function ApprovalQueue({
                       { label: "TYPE", value: selected.policy.name },
                       {
                         label: "DATES",
-                        value: formatRange(selected.startDate, selected.endDate),
+                        value: formatWhen(
+                          selected.startDate,
+                          selected.endDate,
+                          selected.startTime,
+                          selected.endTime,
+                        ),
                       },
                       // Pending days are already spent — see `SPENT` in
                       // lib/leave-service.ts — so this is what is left whether

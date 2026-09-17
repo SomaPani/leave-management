@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CreditRule } from "@/lib/leave";
 import {
+  MAX_SHORT_LEAVE_MINUTES,
   accrualStart,
   balanceAsOf,
   chargeYear,
@@ -10,7 +11,12 @@ import {
   creditedInYear,
   datesInRange,
   effectiveEndDate,
+  formatClockTime,
+  formatWhen,
   offDates,
+  parseClockTime,
+  shortLeaveTimes,
+  timesOverlap,
   unitNoun,
 } from "@/lib/leave";
 
@@ -442,5 +448,149 @@ describe("an EARNED rule", () => {
       used: 0,
       balance: 0,
     });
+  });
+});
+
+describe("parseClockTime", () => {
+  it("reads a 24-hour clock value as minutes from midnight", () => {
+    expect(parseClockTime("15:00")).toBe(900);
+  });
+
+  it("reads midnight as zero", () => {
+    expect(parseClockTime("00:00")).toBe(0);
+  });
+
+  it("reads a value with minutes", () => {
+    expect(parseClockTime("09:45")).toBe(585);
+  });
+
+  it("accepts a single-digit hour, which some browsers send", () => {
+    expect(parseClockTime("9:45")).toBe(585);
+  });
+
+  it("refuses an hour above 23", () => {
+    expect(parseClockTime("24:00")).toBeNull();
+  });
+
+  it("refuses minutes above 59", () => {
+    expect(parseClockTime("10:60")).toBeNull();
+  });
+
+  it("refuses a malformed value", () => {
+    expect(parseClockTime("3 PM")).toBeNull();
+  });
+
+  it("refuses an empty value", () => {
+    expect(parseClockTime("")).toBeNull();
+  });
+});
+
+describe("formatClockTime", () => {
+  it("renders an afternoon time on a 12-hour clock", () => {
+    expect(formatClockTime(900)).toBe("3:00 PM");
+  });
+
+  it("renders a morning time", () => {
+    expect(formatClockTime(585)).toBe("9:45 AM");
+  });
+
+  it("renders noon as 12 PM, not 0 PM", () => {
+    expect(formatClockTime(720)).toBe("12:00 PM");
+  });
+
+  it("renders midnight as 12 AM, not 0 AM", () => {
+    expect(formatClockTime(0)).toBe("12:00 AM");
+  });
+
+  it("renders half past midnight as 12:30 AM", () => {
+    expect(formatClockTime(30)).toBe("12:30 AM");
+  });
+});
+
+describe("timesOverlap", () => {
+  it("finds an overlap when one range starts inside the other", () => {
+    expect(timesOverlap(540, 660, 600, 720)).toBe(true);
+  });
+
+  it("finds an overlap when one range contains the other", () => {
+    expect(timesOverlap(540, 780, 600, 660)).toBe(true);
+  });
+
+  it("does not treat adjacency as overlap", () => {
+    expect(timesOverlap(600, 660, 660, 720)).toBe(false);
+  });
+
+  it("does not treat adjacency as overlap in the other direction", () => {
+    expect(timesOverlap(660, 720, 600, 660)).toBe(false);
+  });
+
+  it("finds no overlap in disjoint ranges", () => {
+    expect(timesOverlap(540, 600, 900, 1020)).toBe(false);
+  });
+});
+
+describe("shortLeaveTimes", () => {
+  const TODAY = "2026-09-17";
+
+  it("accepts a two-hour range on a USES policy today", () => {
+    expect(shortLeaveTimes("USES", 900, 1020, TODAY, TODAY)).toBeNull();
+  });
+
+  it("accepts a range exactly at the cap", () => {
+    const end = 540 + MAX_SHORT_LEAVE_MINUTES;
+    expect(shortLeaveTimes("USES", 540, end, TODAY, TODAY)).toBeNull();
+  });
+
+  it("accepts a range already in the past — filed after stepping out", () => {
+    expect(shortLeaveTimes("USES", 0, 60, TODAY, TODAY)).toBeNull();
+  });
+
+  it("refuses a USES policy with no times", () => {
+    expect(shortLeaveTimes("USES", null, null, TODAY, TODAY)).toMatch(/start and an end time/);
+  });
+
+  it("refuses a DAYS policy that was sent times", () => {
+    expect(shortLeaveTimes("DAYS", 900, 1020, TODAY, TODAY)).toMatch(/whole days/);
+  });
+
+  it("accepts a DAYS policy with no times", () => {
+    expect(shortLeaveTimes("DAYS", null, null, "2026-09-24", TODAY)).toBeNull();
+  });
+
+  it("refuses a short leave dated yesterday", () => {
+    expect(shortLeaveTimes("USES", 900, 1020, "2026-09-16", TODAY)).toMatch(/today/);
+  });
+
+  it("refuses a short leave dated tomorrow", () => {
+    expect(shortLeaveTimes("USES", 900, 1020, "2026-09-18", TODAY)).toMatch(/today/);
+  });
+
+  it("refuses an end at or before the start", () => {
+    expect(shortLeaveTimes("USES", 1020, 900, TODAY, TODAY)).toMatch(/after the start/);
+  });
+
+  it("refuses a zero-length range", () => {
+    expect(shortLeaveTimes("USES", 900, 900, TODAY, TODAY)).toMatch(/after the start/);
+  });
+
+  it("refuses a span one minute over the cap", () => {
+    const end = 540 + MAX_SHORT_LEAVE_MINUTES + 1;
+    expect(shortLeaveTimes("USES", 540, end, TODAY, TODAY)).toMatch(/four hours/);
+  });
+});
+
+describe("formatWhen", () => {
+  it("renders a single day with no times as the date alone", () => {
+    expect(formatWhen("2026-09-17", "2026-09-17", null, null)).toBe("Sep 17");
+  });
+
+  it("renders a span with no times as a date range", () => {
+    expect(formatWhen("2026-09-17", "2026-09-21", null, null)).toBe("Sep 17 – Sep 21");
+  });
+
+  it("appends the hours to a timed day", () => {
+    expect(formatWhen("2026-09-17", "2026-09-17", 900, 1020)).toBe(
+      "Sep 17 · 3:00 PM – 5:00 PM",
+    );
   });
 });

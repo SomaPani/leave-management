@@ -8,6 +8,7 @@ import {
   patchNullableEnum,
   patchNullableString,
 } from "@/lib/api";
+import { leaveRequestInputFrom } from "@/lib/leave-input";
 import { memberProfileFrom, statusFilterFrom } from "@/lib/member-input";
 import { HttpError } from "@/lib/rbac";
 
@@ -171,5 +172,50 @@ describe("statusFilterFrom", () => {
 
   it("rejects anything else", () => {
     expect(() => statusFilterFrom(params("status=retired"))).toThrow(HttpError);
+  });
+});
+
+describe("leaveRequestInputFrom — times", () => {
+  const base = { policyId: "p1", startDate: "2026-09-17" };
+
+  it("reads a start and end time as minutes from midnight", () => {
+    const input = leaveRequestInputFrom({ ...base, startTime: "15:00", endTime: "17:00" });
+
+    expect(input.startTime).toBe(900);
+    expect(input.endTime).toBe(1020);
+  });
+
+  it("treats missing times as null — a day-based request", () => {
+    const input = leaveRequestInputFrom(base);
+
+    expect(input.startTime).toBeNull();
+    expect(input.endTime).toBeNull();
+  });
+
+  it("treats empty times as null — the form's untouched inputs", () => {
+    const input = leaveRequestInputFrom({ ...base, startTime: "", endTime: "" });
+
+    expect(input.startTime).toBeNull();
+    expect(input.endTime).toBeNull();
+  });
+
+  it("refuses a malformed start time", () => {
+    expect(() => leaveRequestInputFrom({ ...base, startTime: "3 PM", endTime: "17:00" })).toThrow(
+      /startTime/,
+    );
+  });
+
+  it("refuses a malformed end time", () => {
+    expect(() => leaveRequestInputFrom({ ...base, startTime: "15:00", endTime: "25:00" })).toThrow(
+      /endTime/,
+    );
+  });
+
+  it("refuses a start time with no end time", () => {
+    expect(() => leaveRequestInputFrom({ ...base, startTime: "15:00" })).toThrow(/both/);
+  });
+
+  it("refuses an end time with no start time", () => {
+    expect(() => leaveRequestInputFrom({ ...base, endTime: "17:00" })).toThrow(/both/);
   });
 });

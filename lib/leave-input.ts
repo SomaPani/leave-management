@@ -2,6 +2,7 @@ import { optionalString, requiredString } from "@/lib/api";
 import { parseDateParam } from "@/lib/attendance";
 import type { Decision, DecisionInput } from "@/lib/leave-review-service";
 import type { LeaveRequestInput } from "@/lib/leave-service";
+import { parseClockTime } from "@/lib/leave";
 import { HttpError } from "@/lib/rbac";
 
 /**
@@ -19,6 +20,31 @@ import { HttpError } from "@/lib/rbac";
 /** Long enough for a paragraph, short enough that the column is not a dumping ground. */
 const MAX_REASON = 500;
 
+/**
+ * One `<input type="time">` value as minutes from midnight, or null when it
+ * was not filled in.
+ *
+ * Shape only. Whether a time is *allowed* on this policy, on this date, for
+ * this long is `shortLeaveTimes` in lib/leave.ts, called by the service — it
+ * needs the policy's unit and the server's today, neither of which a parser
+ * has any business fetching.
+ */
+function clockField(body: Record<string, unknown>, field: string): number | null {
+  const raw = body[field];
+  if (raw === undefined || raw === null || raw === "") return null;
+
+  if (typeof raw !== "string") {
+    throw new HttpError(400, `"${field}" must be a time like "15:00".`);
+  }
+
+  const minutes = parseClockTime(raw);
+  if (minutes === null) {
+    throw new HttpError(400, `"${field}" must be a time like "15:00".`);
+  }
+
+  return minutes;
+}
+
 export function leaveRequestInputFrom(
   body: Record<string, unknown>,
 ): LeaveRequestInput {
@@ -35,6 +61,15 @@ export function leaveRequestInputFrom(
     throw new HttpError(400, '"endDate" must not be earlier than "startDate".');
   }
 
+  const startTime = clockField(body, "startTime");
+  const endTime = clockField(body, "endTime");
+
+  // Pairing is a fact about the shape of the body, so it is refused here.
+  // Ordering and the four-hour cap are policy, and live in `shortLeaveTimes`.
+  if ((startTime === null) !== (endTime === null)) {
+    throw new HttpError(400, "Give both a start time and an end time, or neither.");
+  }
+
   const reason = optionalString(body, "reason");
   if (reason !== null && reason.length > MAX_REASON) {
     throw new HttpError(400, `"reason" must be ${MAX_REASON} characters or fewer.`);
@@ -44,6 +79,8 @@ export function leaveRequestInputFrom(
     policyId: requiredString(body, "policyId"),
     startDate,
     endDate,
+    startTime,
+    endTime,
     reason,
   };
 }

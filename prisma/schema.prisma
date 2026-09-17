@@ -388,6 +388,18 @@ model LeaveRequest {
   /// re-price a request approved in September.
   cost Int
 
+  /// Minutes from midnight, for a USES request that occupies part of a day:
+  /// 15:00 is 900. Null on every day-based request.
+  ///
+  /// Int rather than @db.Time because these are wall-clock marks with no
+  /// timezone — 3 PM is 3 PM wherever the member sits — and because the
+  /// overlap test and the four-hour cap are then plain integer arithmetic.
+  ///
+  /// Both set or both null: the LeaveRequest_times_paired CHECK enforces it,
+  /// so no reader has to handle a half-timed row.
+  startTime Int?
+  endTime   Int?
+
   reason String?
 
   status LeaveRequestStatus @default(PENDING)

@@ -1,4 +1,4 @@
-import { addDays, isWeekend } from "@/lib/date";
+import { addDays, formatRange, isWeekend } from "@/lib/date";
 
 /**
  * The leave arithmetic, as pure functions.
@@ -120,6 +120,138 @@ export function unitNoun(unit: LeaveUnitName, count: number): string {
  * union rather than imported from the generated client, for the same
  * client-safety reason as `LeaveUnitName`.
  */
+/**
+ * The longest a short leave may run. Past four hours it is half a day, which
+ * is a different leave type and a different conversation.
+ *
+ * Deliberately not a CHECK constraint: it is a policy that may reasonably
+ * change, and enforcing it in the database would make changing it a
+ * migration.
+ */
+export const MAX_SHORT_LEAVE_MINUTES = 240;
+
+/**
+ * `"15:00"` -> `900`, or null when the value is not a real clock time.
+ *
+ * A single-digit hour is accepted because not every browser pads what its
+ * `<input type="time">` submits, and refusing `"9:45"` would be a refusal
+ * about the browser rather than about the member.
+ */
+export function parseClockTime(value: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+
+  return hours * 60 + minutes;
+}
+
+/**
+ * `900` -> `"3:00 PM"`. The one place the display format is decided, so the
+ * apply form, the approvals queue and the member's own list cannot drift.
+ *
+ * The `% 12 || 12` is what keeps noon from rendering as "0:00 PM" and
+ * midnight from rendering as "0:00 AM" — the two cases a 12-hour clock gets
+ * wrong, and the reason both have a test.
+ */
+export function formatClockTime(minutes: number): string {
+  const hours24 = Math.floor(minutes / 60);
+  const hours12 = hours24 % 12 || 12;
+  const rest = String(minutes % 60).padStart(2, "0");
+  return `${hours12}:${rest} ${hours24 < 12 ? "AM" : "PM"}`;
+}
+
+/**
+ * When a leave request happens, for the one line every screen shows.
+ *
+ * `Sep 17` for a day, `Sep 17 – Sep 21` for a span, and
+ * `Sep 17 · 3:00 PM – 5:00 PM` for a short leave. One function rather than
+ * two call sites formatting a row each, so /approvals and the member's own
+ * list cannot describe the same request two different ways.
+ *
+ * It lives here rather than beside `formatRange` in lib/date.ts because
+ * lib/date.ts imports nothing at all: reaching back for `formatClockTime`
+ * would close a cycle. It goes where the dependency already points.
+ */
+export function formatWhen(
+  from: string,
+  to: string,
+  startTime: number | null,
+  endTime: number | null,
+): string {
+  const dates = formatRange(from, to);
+  if (startTime === null || endTime === null) return dates;
+  return `${dates} · ${formatClockTime(startTime)} – ${formatClockTime(endTime)}`;
+}
+
+/**
+ * Whether two half-open ranges share any minute.
+ *
+ * Half-open on purpose: a range that ends at 11:00 and one that starts at
+ * 11:00 do not overlap, because the member is back. Touching endpoints is
+ * the case this would otherwise get wrong, so it has a test in both
+ * directions.
+ */
+export function timesOverlap(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number,
+): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+/**
+ * Whether these times may be filed against this policy on this date: the
+ * refusal to show the member, or null when they may.
+ *
+ * A sentence rather than a boolean because both callers have to say why — the
+ * form beside the inputs, the service in a 400. The shape `claimableDay` in
+ * lib/comp-off.ts established.
+ *
+ * Rules 1, 2 and 3 of the spec live here together because they are one
+ * question from a caller's side — may this be filed? — and splitting them
+ * would put three refusals in three places that must agree.
+ *
+ * The hours are never compared to the clock. Filing at 5 PM for 3:00-5:00 PM
+ * is accepted: people step out first and file afterwards, an approver still
+ * decides it, and a rule that changes with the time of day is one nobody can
+ * predict.
+ */
+export function shortLeaveTimes(
+  unit: LeaveUnitName,
+  startTime: number | null,
+  endTime: number | null,
+  startDate: string,
+  today: string,
+): string | null {
+  if (unit !== "USES") {
+    return startTime === null && endTime === null
+      ? null
+      : "That leave type is taken in whole days, not hours.";
+  }
+
+  if (startTime === null || endTime === null) {
+    return "A short leave needs a start and an end time.";
+  }
+
+  if (startDate !== today) {
+    return "A short leave can only be taken today.";
+  }
+
+  if (endTime <= startTime) {
+    return "The end time must be after the start time.";
+  }
+
+  if (endTime - startTime > MAX_SHORT_LEAVE_MINUTES) {
+    return "A short leave cannot run longer than four hours.";
+  }
+
+  return null;
+}
+
 export type LeaveAccrualName = "UPFRONT" | "MONTHLY" | "EARNED";
 
 /**

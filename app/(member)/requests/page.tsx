@@ -5,8 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, EmptyPanel, MonoLabel, StatusBadge } from "@/components/ui";
 import { withdrawCompOffClaimAction } from "@/lib/comp-off-actions";
 import { listOwnCompOffClaims } from "@/lib/comp-off-service";
-import { formatRange } from "@/lib/date";
-import { unitNoun } from "@/lib/leave";
+import { formatWhen, unitNoun } from "@/lib/leave";
 import { withdrawOwnRequestAction } from "@/lib/leave-actions";
 import { listOwnLeaveRequests } from "@/lib/leave-service";
 import { requirePageActor } from "@/lib/page-guards";
@@ -67,7 +66,12 @@ export default async function RequestsPage({
                 </span>
                 <StatusBadge status={request.status} />
                 <span className="font-mono text-[13px] text-ink-2">
-                  {formatRange(request.startDate, request.endDate)}
+                  {formatWhen(
+                    request.startDate,
+                    request.endDate,
+                    request.startTime,
+                    request.endTime,
+                  )}
                 </span>
                 <span className="text-[13px] text-muted">
                   {request.cost} {unitNoun(request.policy.unit, request.cost)}
@@ -88,7 +92,12 @@ export default async function RequestsPage({
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[17px] font-semibold">
                 {selected.policy.name} ·{" "}
-                {formatRange(selected.startDate, selected.endDate)}
+                {formatWhen(
+                  selected.startDate,
+                  selected.endDate,
+                  selected.startTime,
+                  selected.endTime,
+                )}
               </h2>
               <StatusBadge status={selected.status} />
             </div>

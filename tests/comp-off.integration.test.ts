@@ -675,6 +675,8 @@ describe("filing leave with comp-off loaded first", () => {
       policyId: policy.id,
       startDate: `${THIS_YEAR}-11-09`,
       endDate: `${THIS_YEAR}-11-09`,
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     expect(request.approver?.id).toBe(adminId);

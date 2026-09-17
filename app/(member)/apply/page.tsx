@@ -81,6 +81,7 @@ export default async function ApplyPage({
           holidayDates={[...offDates(holidays)]}
           defaultFrom={addDays(today, 7)}
           defaultTo={addDays(today, 9)}
+          today={today}
         />
       )}
 
