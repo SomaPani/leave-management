@@ -14,6 +14,8 @@ import {
   canDeleteAdmin,
   canDeleteMember,
   canDeleteOrganization,
+  canGrantCompOff,
+  canRevokeCompOffGrant,
   canListAttendance,
   canListHolidays,
   canListLeavePolicies,
@@ -449,5 +451,45 @@ describe("canListCompOffClaims", () => {
 
   it("denies a member - their own claims come from a self-scoped read", () => {
     expect(canListCompOffClaims(memberA)).toBe(false);
+  });
+});
+
+describe("canGrantCompOff", () => {
+  it("allows an admin granting to a member of their own organization", () => {
+    expect(canGrantCompOff(adminA, memberA.id)).toBe(true);
+  });
+
+  it("allows an admin granting to another admin - admins work weekends too", () => {
+    expect(canGrantCompOff(adminA, "a-colleague")).toBe(true);
+  });
+
+  it("denies an admin granting to themselves - nobody mints their own credit", () => {
+    expect(canGrantCompOff(adminA, adminA.id)).toBe(false);
+  });
+
+  it("denies a member", () => {
+    expect(canGrantCompOff(memberA, "someone-else")).toBe(false);
+  });
+
+  it("denies a superadmin, who belongs to no organization and has no roster", () => {
+    expect(canGrantCompOff(superadmin, memberA.id)).toBe(false);
+  });
+});
+
+describe("canRevokeCompOffGrant", () => {
+  it("allows an admin of the grant's own organization", () => {
+    expect(canRevokeCompOffGrant(adminA, ORG_A)).toBe(true);
+  });
+
+  it("denies an admin of a different organization", () => {
+    expect(canRevokeCompOffGrant(adminB, ORG_A)).toBe(false);
+  });
+
+  it("denies a member", () => {
+    expect(canRevokeCompOffGrant(memberA, ORG_A)).toBe(false);
+  });
+
+  it("denies a superadmin, who grants nothing and so revokes nothing", () => {
+    expect(canRevokeCompOffGrant(superadmin, ORG_A)).toBe(false);
   });
 });

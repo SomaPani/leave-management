@@ -449,6 +449,19 @@ enum CompOffClaimStatus {
   WITHDRAWN
 }
 
+/// Where a comp-off credit came from.
+///
+/// CLAIM is the member asking for a day they worked; ADMIN_GRANT is an admin
+/// crediting it from /setup without being asked. The credit itself is
+/// identical and `earnedByYearFrom` does not read this column — see section
+/// 3.1 of Docs/2026-09-16-comp-off-admin-grant-design.md. It exists for the
+/// audit, and to scope the revoke on /setup so it can never withdraw a claim
+/// a member actually filed.
+enum CompOffSource {
+  CLAIM
+  ADMIN_GRANT
+}
+
 /// One member's claim that they worked a day they were not owed.
 ///
 /// An APPROVED claim *is* the credit — there is no separate ledger. The
@@ -482,6 +495,14 @@ model CompOffClaim {
 
   status CompOffClaimStatus @default(PENDING)
 
+  /// Who initiated this credit. The default is what makes the migration a
+  /// single ALTER with no data step: every row that existed before grants
+  /// was filed by its own subject, which is exactly `CLAIM`.
+  ///
+  /// An ADMIN_GRANT row is born APPROVED, with `decidedAt` and `decidedById`
+  /// set at insert — there was never a pending state to decide.
+  source CompOffSource @default(CLAIM)
+
   /// Who it went to at submit — the claimant's manager, or an admin. Routing,
   /// not permission, and SetNull rather than Restrict for the reason
   /// `LeaveRequest.approverId` gives: an approver who leaves is deleted, and
@@ -509,6 +530,8 @@ model CompOffClaim {
   @@index([userId, status])
   /// The approvals section: one organization in one state, oldest first.
   @@index([organizationId, status, createdAt])
+  /// The grant list on /setup: one organization's grants, newest first.
+  @@index([organizationId, source, createdAt])
 }
 
 enum ScoreStatus {

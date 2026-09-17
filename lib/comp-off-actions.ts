@@ -4,10 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { currentActor } from "@/lib/auth";
-import { compOffClaimInputFrom, compOffDecisionFrom } from "@/lib/comp-off-input";
+import {
+  compOffClaimInputFrom,
+  compOffDecisionFrom,
+  compOffGrantInputFrom,
+} from "@/lib/comp-off-input";
 import {
   createOwnCompOffClaim,
   decideCompOffClaim,
+  grantCompOff,
+  revokeCompOffGrant,
   withdrawOwnCompOffClaim,
 } from "@/lib/comp-off-service";
 import { backWithError, field, formBody } from "@/lib/form";
@@ -87,4 +93,45 @@ export async function reviewCompOffClaimAction(form: FormData): Promise<void> {
 
   revalidatePath("/approvals");
   redirect(back);
+}
+
+/**
+ * An admin grants a comp-off from the Comp-off section on /setup.
+ *
+ * Every path lands back on /setup, success and failure alike: the form is one
+ * card among four others on a long page, and a refusal has to appear where
+ * the admin was typing rather than on a screen they have to navigate back
+ * from. "That member already has a comp-off for that day" is the refusal they
+ * will actually meet.
+ */
+export async function grantCompOffAction(form: FormData): Promise<void> {
+  try {
+    const actor = requireActor(await currentActor());
+    await grantCompOff(actor, compOffGrantInputFrom(formBody(form)));
+  } catch (error) {
+    backWithError("/setup", error);
+  }
+
+  revalidatePath("/setup");
+  // /apply reads the balance this grant just moved, and the member may have
+  // it open. Revalidating here is cheaper than a stale number they cannot
+  // explain.
+  revalidatePath("/apply");
+  redirect("/setup?granted=1");
+}
+
+/** An admin takes a grant back, from the same section. */
+export async function revokeCompOffGrantAction(form: FormData): Promise<void> {
+  const claimId = field(form, "claimId");
+
+  try {
+    const actor = requireActor(await currentActor());
+    await revokeCompOffGrant(actor, claimId);
+  } catch (error) {
+    backWithError("/setup", error);
+  }
+
+  revalidatePath("/setup");
+  revalidatePath("/apply");
+  redirect("/setup?revoked=1");
 }

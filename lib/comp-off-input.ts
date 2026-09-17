@@ -4,6 +4,7 @@ import type {
   CompOffClaimInput,
   CompOffDecision,
   CompOffDecisionInput,
+  CompOffGrantInput,
 } from "@/lib/comp-off";
 import { HttpError } from "@/lib/rbac";
 
@@ -35,6 +36,25 @@ export function compOffClaimInputFrom(
   }
 
   return { workedOn, reason };
+}
+
+/**
+ * A grant body, from the Comp-off section on /setup.
+ *
+ * The claim fields are parsed by `compOffClaimInputFrom` rather than repeated,
+ * so the reason cap and the date coercion cannot drift between the two forms.
+ * Whether this admin may grant to this `userId` is `canGrantCompOff`, and
+ * whether the day is claimable at all is `claimableDay` — both need context a
+ * parser does not have.
+ */
+export function compOffGrantInputFrom(
+  body: Record<string, unknown>,
+): CompOffGrantInput {
+  // Read first: an empty picker is the likeliest mistake on this form, and
+  // "pick somebody" is a more useful refusal than one about the date.
+  const userId = requiredString(body, "userId");
+
+  return { userId, ...compOffClaimInputFrom(body) };
 }
 
 /** The form's button values, and the statuses they mean. */

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { compOffClaimInputFrom, compOffDecisionFrom } from "@/lib/comp-off-input";
+import {
+  compOffClaimInputFrom,
+  compOffDecisionFrom,
+  compOffGrantInputFrom,
+} from "@/lib/comp-off-input";
 
 describe("compOffClaimInputFrom", () => {
   it("reads a date and a reason", () => {
@@ -83,5 +87,56 @@ describe("compOffDecisionFrom", () => {
       decision: "REJECTED",
       note: null,
     });
+  });
+});
+
+describe("compOffGrantInputFrom", () => {
+  it("reads a grantee, a date and a reason", () => {
+    expect(
+      compOffGrantInputFrom({
+        userId: "u1",
+        workedOn: "2026-09-13",
+        reason: "Release cutover",
+      }),
+    ).toEqual({ userId: "u1", workedOn: "2026-09-13", reason: "Release cutover" });
+  });
+
+  it("treats a missing reason as null", () => {
+    expect(
+      compOffGrantInputFrom({ userId: "u1", workedOn: "2026-09-13" }).reason,
+    ).toBeNull();
+  });
+
+  it("trims a reason", () => {
+    expect(
+      compOffGrantInputFrom({ userId: "u1", workedOn: "2026-09-13", reason: "  cutover  " })
+        .reason,
+    ).toBe("cutover");
+  });
+
+  it("refuses a missing grantee — the picker's empty option", () => {
+    expect(() => compOffGrantInputFrom({ workedOn: "2026-09-13" })).toThrow(/userId/);
+  });
+
+  it("refuses an empty grantee", () => {
+    expect(() => compOffGrantInputFrom({ userId: "", workedOn: "2026-09-13" })).toThrow(
+      /userId/,
+    );
+  });
+
+  it("refuses a missing date", () => {
+    expect(() => compOffGrantInputFrom({ userId: "u1" })).toThrow(/workedOn/);
+  });
+
+  it("refuses a malformed date", () => {
+    expect(() => compOffGrantInputFrom({ userId: "u1", workedOn: "13-09-2026" })).toThrow(
+      /workedOn/,
+    );
+  });
+
+  it("refuses a reason longer than 500 characters", () => {
+    expect(() =>
+      compOffGrantInputFrom({ userId: "u1", workedOn: "2026-09-13", reason: "x".repeat(501) }),
+    ).toThrow(/500 characters or fewer/);
   });
 });

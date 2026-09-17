@@ -30,6 +30,27 @@ export type CompOffClaimStatusName = "PENDING" | "APPROVED" | "REJECTED" | "WITH
  */
 export type CompOffClaimInput = { workedOn: string; reason: string | null };
 
+/**
+ * Mirrors the `CompOffSource` enum in the schema, declared here as a string
+ * union for the same client-safety reason `CompOffClaimStatusName` gives.
+ *
+ * `earnedByYearFrom` deliberately does not read it: a granted day and a
+ * claimed day are the same credit. It exists for the audit, and to scope the
+ * revoke on /setup so it can never withdraw a claim a member actually filed.
+ */
+export type CompOffSourceName = "CLAIM" | "ADMIN_GRANT";
+
+/**
+ * A grant as it arrives from the /setup form: a claim body plus the colleague
+ * it is for.
+ *
+ * `userId` is the one field `CompOffClaimInput` cannot carry. A claim is
+ * filed by its subject and so needs no id; a grant is filed *for* somebody,
+ * and keeping the two shapes apart is what stops an id ever being read on the
+ * self-scoped path.
+ */
+export type CompOffGrantInput = CompOffClaimInput & { userId: string };
+
 /** The two decisions an approver can reach. A claim is not withdrawn by them. */
 export type CompOffDecision = "APPROVED" | "REJECTED";
 

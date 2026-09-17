@@ -56,7 +56,7 @@ const isWeekday = (iso: string) => dayOfWeek(iso) > 0 && dayOfWeek(iso) < 6;
 const SUNDAYS: string[] = [];
 {
   let cursor = addDays(TODAY, -1);
-  while (SUNDAYS.length < 10) {
+  while (SUNDAYS.length < 20) {
     cursor = walk(cursor, -1, isSunday);
     SUNDAYS.push(cursor);
     cursor = addDays(cursor, -1);
@@ -73,6 +73,16 @@ const [
   ADMIN_SUNDAY,
   MEMBER_DECIDE_SUNDAY,
   CYCLE_SUNDAY,
+  GRANT_SUNDAY,
+  GRANT_BALANCE_SUNDAY,
+  GRANT_DUP_SUNDAY,
+  GRANT_SELF_SUNDAY,
+  GRANT_MEMBER_SUNDAY,
+  GRANT_FOREIGN_SUNDAY,
+  REVOKE_SUNDAY,
+  REVOKE_TWICE_SUNDAY,
+  REVOKE_CLAIM_SUNDAY,
+  GRANT_LIST_SUNDAY,
 ] = SUNDAYS;
 
 /** A past weekday that is not a holiday: an ordinary working day. */
@@ -90,6 +100,7 @@ let secondAdminId: string;
 let memberId: string;
 let balanceMemberId: string;
 let otherOrgMemberId: string;
+let granteeId: string;
 
 const adminActor = (): Actor => ({ id: adminId, role: Role.ADMIN, organizationId: orgId });
 const secondAdminActor = (): Actor => ({
@@ -108,6 +119,7 @@ const otherOrgMemberActor = (): Actor => ({
   role: Role.MEMBER,
   organizationId: otherOrgId,
 });
+const granteeActor = (): Actor => ({ id: granteeId, role: Role.MEMBER, organizationId: orgId });
 const superadminActor = (): Actor => ({ id: "su", role: Role.SUPERADMIN, organizationId: null });
 
 beforeAll(async () => {
@@ -170,6 +182,19 @@ beforeAll(async () => {
     },
   });
   balanceMemberId = balanceMember.id;
+
+  // The grant tests' own member, so their balance starts from nothing.
+  const grantee = await prisma.user.create({
+    data: {
+      name: "Run Grantee",
+      email: email("grantee"),
+      passwordHash: "x",
+      role: Role.MEMBER,
+      organizationId: orgId,
+      regionId: chennaiId,
+    },
+  });
+  granteeId = grantee.id;
 
   const otherOrgMember = await prisma.user.create({
     data: {
@@ -659,5 +684,234 @@ describe("filing leave with comp-off loaded first", () => {
       reason: null,
     });
     expect(claim.approver?.id).toBe(request.approver?.id);
+  });
+});
+
+describe("listCompOffGrantees", () => {
+  it("lists colleagues in the admin's own organization", async () => {
+    const names = (await compOff.listCompOffGrantees(adminActor())).map((u) => u.id);
+
+    expect(names).toContain(memberId);
+    expect(names).toContain(granteeId);
+  });
+
+  it("excludes the acting admin - nobody grants to themselves", async () => {
+    const ids = (await compOff.listCompOffGrantees(adminActor())).map((u) => u.id);
+
+    expect(ids).not.toContain(adminId);
+  });
+
+  it("includes other admins - an admin works weekends too", async () => {
+    const ids = (await compOff.listCompOffGrantees(adminActor())).map((u) => u.id);
+
+    expect(ids).toContain(secondAdminId);
+  });
+
+  it("excludes another organization's people", async () => {
+    const ids = (await compOff.listCompOffGrantees(adminActor())).map((u) => u.id);
+
+    expect(ids).not.toContain(otherOrgMemberId);
+  });
+
+  it("refuses a member with 403", async () => {
+    await expect(compOff.listCompOffGrantees(memberActor())).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+});
+
+describe("grantCompOff", () => {
+  it("credits a day the member never claimed", async () => {
+    const grant = await compOff.grantCompOff(adminActor(), {
+      userId: granteeId,
+      workedOn: GRANT_SUNDAY,
+      reason: "Covered the release cutover",
+    });
+
+    expect(grant).toMatchObject({
+      status: CompOffClaimStatus.APPROVED,
+      workedOn: GRANT_SUNDAY,
+      reason: "Covered the release cutover",
+    });
+  });
+
+  it("records the granting admin and marks the row a grant", async () => {
+    const grant = await compOff.grantCompOff(adminActor(), {
+      userId: granteeId,
+      workedOn: GRANT_BALANCE_SUNDAY,
+      reason: null,
+    });
+
+    const row = await prisma.compOffClaim.findUnique({
+      where: { id: grant.id },
+      select: { source: true, decidedById: true, decidedAt: true, userId: true },
+    });
+
+    expect(row).toMatchObject({
+      source: "ADMIN_GRANT",
+      decidedById: adminId,
+      userId: granteeId,
+    });
+    expect(row?.decidedAt).not.toBeNull();
+  });
+
+  it("moves the grantee's earned credit without any approval step", async () => {
+    const earned = await compOff.earnedByYearFor(granteeId);
+
+    expect(earned.get(THIS_YEAR)).toBe(2);
+  });
+
+  it("accepts a holiday in the grantee's region that falls on a weekday", async () => {
+    const grant = await compOff.grantCompOff(adminActor(), {
+      userId: granteeId,
+      workedOn: REGION_HOLIDAY,
+      reason: null,
+    });
+
+    expect(grant.workedOn).toBe(REGION_HOLIDAY);
+  });
+
+  it("refuses an ordinary working day with 400", async () => {
+    await expect(
+      compOff.grantCompOff(adminActor(), {
+        userId: granteeId,
+        workedOn: WORKING_DAY,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a future day with 400", async () => {
+    await expect(
+      compOff.grantCompOff(adminActor(), {
+        userId: granteeId,
+        workedOn: FUTURE_SUNDAY,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a day the member already holds a claim for, with 409", async () => {
+    await compOff.createOwnCompOffClaim(granteeActor(), {
+      workedOn: GRANT_DUP_SUNDAY,
+      reason: null,
+    });
+
+    await expect(
+      compOff.grantCompOff(adminActor(), {
+        userId: granteeId,
+        workedOn: GRANT_DUP_SUNDAY,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("refuses an admin granting to themselves with 403", async () => {
+    await expect(
+      compOff.grantCompOff(adminActor(), {
+        userId: adminId,
+        workedOn: GRANT_SELF_SUNDAY,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("refuses a member with 403", async () => {
+    await expect(
+      compOff.grantCompOff(memberActor(), {
+        userId: granteeId,
+        workedOn: GRANT_MEMBER_SUNDAY,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("answers 404 for a grantee in another organization", async () => {
+    await expect(
+      compOff.grantCompOff(adminActor(), {
+        userId: otherOrgMemberId,
+        workedOn: GRANT_FOREIGN_SUNDAY,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("revokeCompOffGrant", () => {
+  it("takes back a grant, and the credit goes with it", async () => {
+    const grant = await compOff.grantCompOff(adminActor(), {
+      userId: granteeId,
+      workedOn: REVOKE_SUNDAY,
+      reason: null,
+    });
+    const before = (await compOff.earnedByYearFor(granteeId)).get(THIS_YEAR) ?? 0;
+
+    await compOff.revokeCompOffGrant(adminActor(), grant.id);
+
+    const after = (await compOff.earnedByYearFor(granteeId)).get(THIS_YEAR) ?? 0;
+    expect(after).toBe(before - 1);
+  });
+
+  it("refuses to revoke twice, with 409", async () => {
+    const grant = await compOff.grantCompOff(adminActor(), {
+      userId: granteeId,
+      workedOn: REVOKE_TWICE_SUNDAY,
+      reason: null,
+    });
+    await compOff.revokeCompOffGrant(adminActor(), grant.id);
+
+    await expect(
+      compOff.revokeCompOffGrant(adminActor(), grant.id),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("will not touch a claim the member filed themselves, answering 404", async () => {
+    const claim = await compOff.createOwnCompOffClaim(granteeActor(), {
+      workedOn: REVOKE_CLAIM_SUNDAY,
+      reason: null,
+    });
+    await compOff.decideCompOffClaim(adminActor(), claim.id, {
+      decision: "APPROVED",
+      note: null,
+    });
+
+    await expect(
+      compOff.revokeCompOffGrant(adminActor(), claim.id),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("refuses a member with 403", async () => {
+    const grant = await compOff.grantCompOff(adminActor(), {
+      userId: granteeId,
+      workedOn: GRANT_LIST_SUNDAY,
+      reason: null,
+    });
+
+    await expect(
+      compOff.revokeCompOffGrant(memberActor(), grant.id),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("listCompOffGrants", () => {
+  it("lists grants and not claims the members filed", async () => {
+    const grants = await compOff.listCompOffGrants(adminActor());
+
+    expect(grants.length).toBeGreaterThan(0);
+    for (const grant of grants) {
+      expect(grant.source).toBe("ADMIN_GRANT");
+    }
+  });
+
+  it("carries the grantee, so the list can name who was credited", async () => {
+    const grants = await compOff.listCompOffGrants(adminActor());
+
+    expect(grants[0].user).toMatchObject({ id: expect.any(String), name: expect.any(String) });
+  });
+
+  it("refuses a member with 403", async () => {
+    await expect(compOff.listCompOffGrants(memberActor())).rejects.toMatchObject({
+      status: 403,
+    });
   });
 });

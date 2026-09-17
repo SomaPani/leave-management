@@ -1,7 +1,11 @@
 import { DemoBanner } from "@/components/demo-banner";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
+import { CompOffGrant } from "@/components/comp-off-grant";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui";
+import { todayIso } from "@/lib/attendance";
+import { grantCompOffAction, revokeCompOffGrantAction } from "@/lib/comp-off-actions";
+import { listCompOffGrantees, listCompOffGrants } from "@/lib/comp-off-service";
 import {
   demoSetHolidayRegion as setHolidayRegion,
   demoToggleApprovalRule as toggleApprovalRule,
@@ -10,6 +14,9 @@ import {
 } from "@/lib/demo-actions";
 import { formatDayMonth, formatWeekdayShort, isWeekend } from "@/lib/date";
 import { holidayYearGrid, holidaysForRegion } from "@/lib/domain";
+import { listHolidays } from "@/lib/holiday-service";
+import { chargeYear, offDates } from "@/lib/leave";
+import { requirePageActor } from "@/lib/page-guards";
 import { REGIONS, seedDb } from "@/lib/seed";
 
 const HOLIDAY_YEAR = 2026;
@@ -23,10 +30,30 @@ const fieldLabelClass =
 export default async function SetupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ region?: string; demo?: string }>;
+  searchParams: Promise<{
+    region?: string;
+    demo?: string;
+    error?: string;
+    granted?: string;
+    revoked?: string;
+  }>;
 }) {
   const params = await searchParams;
   const db = seedDb();
+
+  // The one section on this page backed by real rows. The four around it are
+  // still `seedDb()`, which is why the banner below names them rather than
+  // claiming the whole screen is sample data.
+  const actor = await requirePageActor();
+  const today = todayIso();
+  const year = chargeYear(today);
+  const [grantees, grants, grantHolidays] = await Promise.all([
+    listCompOffGrantees(actor),
+    listCompOffGrants(actor),
+    // This year and last: a grant is always for a day already worked, and in
+    // January that day is usually in December.
+    listHolidays(actor, { from: `${year - 1}-01-01`, to: `${year}-12-31` }),
+  ]);
   // The region select has nowhere to persist to, so it round-trips through the
   // URL instead — the calendar below really does switch.
   const region =
@@ -45,7 +72,28 @@ export default async function SetupPage({
         meta="ADMIN VIEW"
       />
 
-      <DemoBanner action={params.demo} />
+      <DemoBanner
+        action={params.demo}
+        sections="leave policy, WFH and approval-rule sections"
+      />
+
+      {params.error ? (
+        <p className="rounded-lg border border-danger-line bg-danger-tint px-3.5 py-2.5 text-sm text-danger">
+          {params.error}
+        </p>
+      ) : null}
+
+      {params.granted ? (
+        <p className="rounded-lg border border-brand-tint bg-brand-tint px-3.5 py-2.5 text-sm text-brand-dark">
+          Comp-off granted — it is on their balance now.
+        </p>
+      ) : null}
+
+      {params.revoked ? (
+        <p className="rounded-lg border border-brand-tint bg-brand-tint px-3.5 py-2.5 text-sm text-brand-dark">
+          Grant revoked — the credit is gone.
+        </p>
+      ) : null}
 
       <div className="flex max-w-[940px] flex-col gap-5">
         {db.policies.map((policy, index) => (
@@ -129,6 +177,19 @@ export default async function SetupPage({
             </button>
           </form>
         </Card>
+
+        <CompOffGrant
+          grantAction={grantCompOffAction}
+          revokeAction={revokeCompOffGrantAction}
+          grantees={grantees}
+          grants={grants}
+          // Every region's holidays, not one member's: the picker has not
+          // chosen a person yet when the date is typed. The server re-checks
+          // against the grantee's own region, so the widest set here only ever
+          // lets a refusal arrive a round trip later than it might have.
+          holidayDates={[...offDates(grantHolidays)]}
+          today={today}
+        />
 
         <Card className="flex flex-col gap-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">

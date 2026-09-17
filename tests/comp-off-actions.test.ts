@@ -277,3 +277,96 @@ describe("reviewCompOffClaimAction", () => {
     expect(row?.status).toBe("PENDING");
   });
 });
+
+describe("grantCompOffAction", () => {
+  it("grants the day and returns the admin to /setup", async () => {
+    actorRef.current = adminActor();
+    const form = new FormData();
+    form.set("userId", memberId);
+    form.set("workedOn", SUNDAY);
+    form.set("reason", "Covered the cutover");
+
+    await expect(actions.grantCompOffAction(form)).rejects.toThrow("NEXT_REDIRECT");
+
+    const stored = await prisma.compOffClaim.findFirst({
+      where: { userId: memberId },
+      select: { status: true, source: true, reason: true },
+    });
+    expect(stored).toMatchObject({
+      status: "APPROVED",
+      source: "ADMIN_GRANT",
+      reason: "Covered the cutover",
+    });
+    expect(nav.redirectedTo).toContain("/setup");
+    expect(nav.revalidated).toContain("/setup");
+  });
+
+  it("sends a working-day refusal back to /setup with the message", async () => {
+    actorRef.current = adminActor();
+    const form = new FormData();
+    form.set("userId", memberId);
+    form.set("workedOn", WORKING_DAY);
+
+    await expect(actions.grantCompOffAction(form)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(nav.redirectedTo).toContain("/setup?error=");
+    expect(decodeURIComponent(nav.redirectedTo)).toContain("was a working day");
+  });
+
+  it("sends an empty picker back to /setup rather than throwing", async () => {
+    actorRef.current = adminActor();
+    const form = new FormData();
+    form.set("workedOn", SUNDAY);
+
+    await expect(actions.grantCompOffAction(form)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(nav.redirectedTo).toContain("/setup?error=");
+    expect(decodeURIComponent(nav.redirectedTo)).toContain("userId");
+  });
+
+  it("refuses a member, who has no business on the setup screen", async () => {
+    actorRef.current = member;
+    const form = new FormData();
+    form.set("userId", adminId);
+    form.set("workedOn", SUNDAY);
+
+    await expect(actions.grantCompOffAction(form)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(nav.redirectedTo).toContain("/setup?error=");
+    expect(await prisma.compOffClaim.count({ where: { organizationId: orgId } })).toBe(0);
+  });
+});
+
+describe("revokeCompOffGrantAction", () => {
+  it("revokes the grant and returns the admin to /setup", async () => {
+    actorRef.current = adminActor();
+    const grant = await compOff.grantCompOff(adminActor(), {
+      userId: memberId,
+      workedOn: SECOND_SUNDAY,
+      reason: null,
+    });
+
+    const form = new FormData();
+    form.set("claimId", grant.id);
+
+    await expect(actions.revokeCompOffGrantAction(form)).rejects.toThrow("NEXT_REDIRECT");
+
+    const stored = await prisma.compOffClaim.findUnique({
+      where: { id: grant.id },
+      select: { status: true },
+    });
+    expect(stored?.status).toBe("WITHDRAWN");
+    expect(nav.revalidated).toContain("/setup");
+  });
+
+  it("sends an unknown grant back to /setup with the message", async () => {
+    actorRef.current = adminActor();
+    const form = new FormData();
+    form.set("claimId", "does-not-exist");
+
+    await expect(actions.revokeCompOffGrantAction(form)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(nav.redirectedTo).toContain("/setup?error=");
+    expect(decodeURIComponent(nav.redirectedTo)).toContain("does not exist");
+  });
+});
