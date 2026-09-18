@@ -27,6 +27,8 @@ const service = await import("@/lib/leave-service");
 const review = await import("@/lib/leave-review-service");
 const policyRoute = await import("@/app/api/leave-policies/route");
 const requestRoute = await import("@/app/api/leave-requests/route");
+const { todayIso } = await import("@/lib/attendance");
+const { addDays } = await import("@/lib/date");
 
 const RUN = `lv-${Date.now().toString(36)}`;
 const email = (local: string) => `${RUN}-${local}@example.test`;
@@ -434,6 +436,8 @@ describe("the member's own leave summary", () => {
       policyId: casualId,
       startDate: "2026-09-07",
       endDate: "2026-09-09",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -459,6 +463,8 @@ describe("the member's own leave summary", () => {
       policyId: casualId,
       startDate: "2026-12-31",
       endDate: "2027-01-01",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -479,6 +485,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-09-11",
       endDate: "2026-09-14",
+      startTime: null,
+      endTime: null,
       reason: "Family thing",
     });
 
@@ -518,6 +526,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-11-09",
       endDate: "2026-11-11",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -543,6 +553,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-11-09",
       endDate: "2026-11-11",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -557,6 +569,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-11-09",
       endDate: "2026-11-11",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     expect(created.cost).toBe(3);
@@ -579,17 +593,23 @@ describe("filing a leave request", () => {
     await clearRequests();
     await clearHolidays();
 
+    // A USES policy is short leave, which is filed for today and carries
+    // hours. The end date is deliberately far away: `effectiveEndDate` must
+    // still collapse it onto the start.
+    const today = todayIso();
     const created = await service.createOwnLeaveRequest(memberActor(), {
       policyId: shortId,
-      startDate: "2026-09-07",
-      endDate: "2026-09-30",
+      startDate: today,
+      endDate: addDays(today, 23),
+      startTime: 900,
+      endTime: 1020,
       reason: null,
     });
 
     expect(created).toMatchObject({
       cost: 1,
-      startDate: "2026-09-07",
-      endDate: "2026-09-07",
+      startDate: today,
+      endDate: today,
     });
   });
 
@@ -601,6 +621,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-09-07",
       endDate: "2026-09-09",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -609,6 +631,8 @@ describe("filing a leave request", () => {
         policyId: casualId,
         startDate: "2026-09-09",
         endDate: "2026-09-11",
+        startTime: null,
+        endTime: null,
         reason: null,
       }),
     ).rejects.toMatchObject({ status: 409 });
@@ -620,6 +644,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-09-10",
       endDate: "2026-09-11",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -633,6 +659,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-09-07",
       endDate: "2026-09-09",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     await prisma.leaveRequest.update({
@@ -644,6 +672,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-09-07",
       endDate: "2026-09-09",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     expect(second.cost).toBe(3);
@@ -655,6 +685,8 @@ describe("filing a leave request", () => {
         policyId: otherPolicyId,
         startDate: "2026-10-05",
         endDate: "2026-10-05",
+        startTime: null,
+        endTime: null,
         reason: null,
       }),
     ).rejects.toMatchObject({ status: 404 });
@@ -676,6 +708,8 @@ describe("filing a leave request", () => {
         policyId: retired.id,
         startDate: "2026-10-05",
         endDate: "2026-10-05",
+        startTime: null,
+        endTime: null,
         reason: null,
       }),
     ).rejects.toMatchObject({ status: 404 });
@@ -689,6 +723,8 @@ describe("filing a leave request", () => {
         policyId: casualId,
         startDate: "2026-10-05",
         endDate: "2026-10-05",
+        startTime: null,
+        endTime: null,
         reason: null,
       }),
     ).rejects.toMatchObject({ status: 403 });
@@ -701,6 +737,8 @@ describe("filing a leave request", () => {
       policyId: casualId,
       startDate: "2026-10-05",
       endDate: "2026-10-05",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -716,18 +754,24 @@ describe("reading one's own requests", () => {
       policyId: casualId,
       startDate: "2026-09-07",
       endDate: "2026-09-07",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     await service.createOwnLeaveRequest(memberActor(), {
       policyId: casualId,
       startDate: "2026-10-05",
       endDate: "2026-10-05",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     await service.createOwnLeaveRequest(adminActor(), {
       policyId: casualId,
       startDate: "2026-11-02",
       endDate: "2026-11-02",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -786,6 +830,8 @@ describe("POST /api/leave-requests", () => {
         policyId: casualId,
         startDate: "2026-09-07",
         endDate: "2026-09-09",
+        startTime: null,
+        endTime: null,
         reason: "Family thing",
       }),
     );
@@ -1024,6 +1070,8 @@ describe("balances on a credit schedule", () => {
       policyId: clId,
       startDate: "2026-09-07",
       endDate: "2026-09-08",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -1078,12 +1126,16 @@ describe("the approvals queue", () => {
       policyId: casualId,
       startDate: "2026-11-02",
       endDate: "2026-11-03",
+      startTime: null,
+      endTime: null,
       reason: "First",
     });
     const newer = await service.createOwnLeaveRequest(memberActor(), {
       policyId: casualId,
       startDate: "2026-11-09",
       endDate: "2026-11-10",
+      startTime: null,
+      endTime: null,
       reason: "Second",
     });
 
@@ -1123,6 +1175,8 @@ describe("deciding a request", () => {
       policyId: casualId,
       startDate: "2026-11-16",
       endDate: "2026-11-17",
+      startTime: null,
+      endTime: null,
       reason: "Wedding",
     });
 
@@ -1156,6 +1210,8 @@ describe("deciding a request", () => {
       policyId: casualId,
       startDate: "2026-11-23",
       endDate: "2026-11-24",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -1184,6 +1240,8 @@ describe("deciding a request", () => {
       policyId: casualId,
       startDate: "2026-11-30",
       endDate: "2026-12-01",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     const foreignAdmin: Actor = {
@@ -1208,6 +1266,8 @@ describe("deciding a request", () => {
       policyId: casualId,
       startDate: "2026-12-07",
       endDate: "2026-12-08",
+      startTime: null,
+      endTime: null,
       reason: "Mine",
     });
 
@@ -1227,6 +1287,8 @@ describe("deciding a request", () => {
       policyId: casualId,
       startDate: "2026-12-14",
       endDate: "2026-12-16",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -1250,6 +1312,8 @@ describe("the applicant's balance, as the approver sees it", () => {
       policyId: casualId,
       startDate: "2026-12-21",
       endDate: "2026-12-22",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -1329,6 +1393,8 @@ describe("withdrawing one's own request", () => {
       policyId: casualId,
       startDate: "2026-12-28",
       endDate: "2026-12-29",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -1345,6 +1411,8 @@ describe("withdrawing one's own request", () => {
       policyId: casualId,
       startDate: "2026-12-30",
       endDate: "2026-12-31",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
     await review.decideLeaveRequest(adminActor(), filed.id, {
@@ -1370,3 +1438,284 @@ describe("withdrawing one's own request", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 });
+
+describe("short leave times", () => {
+  let shortPolicyId: string;
+  let dayPolicyId: string;
+  const TODAY = todayIso();
+
+  beforeAll(async () => {
+    const short = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: `${RUN} Short leave`,
+        allowance: 4,
+        unit: "USES",
+        accrual: "UPFRONT",
+        carry: false,
+        effectiveFrom: new Date(`${TODAY.slice(0, 4)}-01-01T00:00:00.000Z`),
+        position: 20,
+      },
+      select: { id: true },
+    });
+    shortPolicyId = short.id;
+
+    const day = await prisma.leavePolicy.create({
+      data: {
+        organizationId: orgId,
+        name: `${RUN} Day leave`,
+        allowance: 10,
+        unit: "DAYS",
+        accrual: "UPFRONT",
+        carry: false,
+        effectiveFrom: new Date(`${TODAY.slice(0, 4)}-01-01T00:00:00.000Z`),
+        position: 21,
+      },
+      select: { id: true },
+    });
+    dayPolicyId = day.id;
+  });
+
+  /** Each test files against its own member, so no two share the day. */
+  const freshMember = async (local: string): Promise<Actor> => {
+    const person = await prisma.user.create({
+      data: {
+        name: `Short ${local}`,
+        email: email(`short-${local}`),
+        passwordHash: "x",
+        role: Role.MEMBER,
+        organizationId: orgId,
+        regionId: chennaiId,
+      },
+      select: { id: true },
+    });
+    return { id: person.id, role: Role.MEMBER, organizationId: orgId };
+  };
+
+  it("stores both times on a short leave taken today", async () => {
+    const actor = await freshMember("store");
+
+    const created = await service.createOwnLeaveRequest(actor, {
+      policyId: shortPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: 900,
+      endTime: 1020,
+      reason: "Dentist",
+    });
+
+    expect(created).toMatchObject({ startTime: 900, endTime: 1020, cost: 1 });
+  });
+
+  it("refuses a short leave dated tomorrow with 400", async () => {
+    const actor = await freshMember("tomorrow");
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: shortPolicyId,
+        startDate: addDays(TODAY, 1),
+        endDate: addDays(TODAY, 1),
+        startTime: 900,
+        endTime: 1020,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a short leave dated yesterday with 400", async () => {
+    const actor = await freshMember("yesterday");
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: shortPolicyId,
+        startDate: addDays(TODAY, -1),
+        endDate: addDays(TODAY, -1),
+        startTime: 900,
+        endTime: 1020,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a span longer than four hours with 400", async () => {
+    const actor = await freshMember("long");
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: shortPolicyId,
+        startDate: TODAY,
+        endDate: TODAY,
+        startTime: 540,
+        endTime: 781,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses a short leave with no times at all with 400", async () => {
+    const actor = await freshMember("notimes");
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: shortPolicyId,
+        startDate: TODAY,
+        endDate: TODAY,
+        startTime: null,
+        endTime: null,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses times on a day-based policy with 400", async () => {
+    const actor = await freshMember("daytimes");
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: dayPolicyId,
+        startDate: addDays(TODAY, 7),
+        endDate: addDays(TODAY, 8),
+        startTime: 900,
+        endTime: 1020,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("leaves a day-based request's times null", async () => {
+    const actor = await freshMember("dayclean");
+
+    const created = await service.createOwnLeaveRequest(actor, {
+      policyId: dayPolicyId,
+      startDate: addDays(TODAY, 14),
+      endDate: addDays(TODAY, 15),
+      startTime: null,
+      endTime: null,
+      reason: null,
+    });
+
+    expect(created.startTime).toBeNull();
+    expect(created.endTime).toBeNull();
+  });
+
+  it("allows a second short leave at hours that do not overlap", async () => {
+    const actor = await freshMember("gap");
+
+    await service.createOwnLeaveRequest(actor, {
+      policyId: shortPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: 540,
+      endTime: 600,
+      reason: null,
+    });
+
+    const second = await service.createOwnLeaveRequest(actor, {
+      policyId: shortPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: 900,
+      endTime: 1020,
+      reason: null,
+    });
+
+    expect(second.startTime).toBe(900);
+  });
+
+  it("allows a second short leave that starts exactly when the first ends", async () => {
+    const actor = await freshMember("touch");
+
+    await service.createOwnLeaveRequest(actor, {
+      policyId: shortPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: 600,
+      endTime: 660,
+      reason: null,
+    });
+
+    const second = await service.createOwnLeaveRequest(actor, {
+      policyId: shortPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: 660,
+      endTime: 720,
+      reason: null,
+    });
+
+    expect(second.startTime).toBe(660);
+  });
+
+  it("refuses a second short leave at overlapping hours with 409", async () => {
+    const actor = await freshMember("clash");
+
+    await service.createOwnLeaveRequest(actor, {
+      policyId: shortPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: 540,
+      endTime: 660,
+      reason: null,
+    });
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: shortPolicyId,
+        startDate: TODAY,
+        endDate: TODAY,
+        startTime: 600,
+        endTime: 720,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("refuses a short leave on a day already covered by a day-based request", async () => {
+    const actor = await freshMember("covered");
+
+    await service.createOwnLeaveRequest(actor, {
+      policyId: dayPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: null,
+      endTime: null,
+      reason: null,
+    });
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: shortPolicyId,
+        startDate: TODAY,
+        endDate: TODAY,
+        startTime: 900,
+        endTime: 1020,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("refuses a day-based request on a day already holding a short leave", async () => {
+    const actor = await freshMember("reverse");
+
+    await service.createOwnLeaveRequest(actor, {
+      policyId: shortPolicyId,
+      startDate: TODAY,
+      endDate: TODAY,
+      startTime: 900,
+      endTime: 1020,
+      reason: null,
+    });
+
+    await expect(
+      service.createOwnLeaveRequest(actor, {
+        policyId: dayPolicyId,
+        startDate: TODAY,
+        endDate: TODAY,
+        startTime: null,
+        endTime: null,
+        reason: null,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+});
+

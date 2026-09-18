@@ -12,14 +12,28 @@ const MESSAGES: Record<string, string> = {
   remove: "the document was not removed.",
 };
 
-export function DemoBanner({ action }: { action?: string }) {
+export function DemoBanner({
+  action,
+  sections,
+}: {
+  action?: string;
+  /**
+   * The sections that are still sample data, when some of the screen is not.
+   *
+   * /setup grants a real comp-off now, so "nothing on this screen is saved"
+   * became false there. A screen that is wholly fixture-backed omits this and
+   * keeps the blanket sentence.
+   */
+  sections?: string;
+}) {
   const detail = action ? MESSAGES[action] : undefined;
+  const standing = sections
+    ? `Sample data — the ${sections} below are not saved.`
+    : "Sample data — nothing on this screen is saved.";
 
   return (
     <p className="rounded-lg border border-warn-line bg-warn-tint px-3.5 py-2.5 text-[13px] text-warn-ink">
-      {detail
-        ? `Sample data — ${detail}`
-        : "Sample data — nothing on this screen is saved."}
+      {detail ? `Sample data — ${detail}` : standing}
     </p>
   );
 }

@@ -2,6 +2,7 @@ import { Role } from "@/generated/prisma/enums";
 import { SidebarNav, type NavItem } from "@/components/sidebar-nav";
 import { Avatar } from "@/components/ui";
 import { auth } from "@/lib/auth";
+import { countPendingCompOffClaims } from "@/lib/comp-off-service";
 import { signOutAction } from "@/lib/org-actions";
 import { countPendingLeaveRequests } from "@/lib/leave-review-service";
 import { requirePageRole } from "@/lib/page-guards";
@@ -15,8 +16,9 @@ import { COMPANY_NAME } from "@/lib/seed";
  * depend on tables that no longer exist. This one is guarded by the Auth.js
  * session.
  *
- * The Approvals badge counts the caller's own organization's pending requests
- * out of `orgapp.LeaveRequest`. The screens under this layout are moving off
+ * The Approvals badge counts the caller's own organization's pending work out
+ * of `orgapp.LeaveRequest` and `orgapp.CompOffClaim` together. The screens
+ * under this layout are moving off
  * the fixture one at a time; /approvals and /attendance have gone, and
  * `COMPANY_NAME` is all that is still read from lib/seed.ts here.
  */
@@ -37,7 +39,14 @@ export default async function LeaveLayout({
 }) {
   const actor = await requirePageRole(Role.ADMIN);
   const session = await auth();
-  const pending = await countPendingLeaveRequests(actor);
+  // One number for one queue of work. An admin does not care which of the
+  // two kinds is waiting, only that something is — both sections live on
+  // /approvals, so one badge is what the badge is for.
+  const [pendingLeave, pendingCompOff] = await Promise.all([
+    countPendingLeaveRequests(actor),
+    countPendingCompOffClaims(actor),
+  ]);
+  const pending = pendingLeave + pendingCompOff;
 
   const items = NAV.map((item) =>
     item.href === "/approvals" ? { ...item, badge: pending } : item,

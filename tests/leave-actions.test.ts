@@ -40,6 +40,8 @@ vi.mock("next/cache", () => ({
 const { prisma } = await import("@/lib/prisma");
 const actions = await import("@/lib/leave-actions");
 const requests = await import("@/lib/leave-service");
+const { todayIso } = await import("@/lib/attendance");
+const { addDays } = await import("@/lib/date");
 
 const RUN = `lvact-${Date.now().toString(36)}`;
 const email = (local: string) => `${RUN}-${local}@example.test`;
@@ -48,6 +50,7 @@ let orgId = "";
 let adminId = "";
 let memberId = "";
 let casualId = "";
+let shortId = "";
 let member: Actor;
 
 beforeAll(async () => {
@@ -87,6 +90,18 @@ beforeAll(async () => {
     },
   });
   casualId = casual.id;
+
+  const short = await prisma.leavePolicy.create({
+    data: {
+      organizationId: orgId,
+      name: "Short leave",
+      allowance: 4,
+      unit: "USES",
+      effectiveFrom: new Date("2026-01-01"),
+      position: 20,
+    },
+  });
+  shortId = short.id;
 });
 
 afterAll(async () => {
@@ -205,6 +220,8 @@ describe("reviewLeaveRequestAction", () => {
       policyId: casualId,
       startDate: "2027-02-01",
       endDate: "2027-02-02",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -229,6 +246,8 @@ describe("reviewLeaveRequestAction", () => {
       policyId: casualId,
       startDate: "2027-02-08",
       endDate: "2027-02-09",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -255,6 +274,8 @@ describe("withdrawOwnRequestAction", () => {
       policyId: casualId,
       startDate: "2027-02-15",
       endDate: "2027-02-16",
+      startTime: null,
+      endTime: null,
       reason: null,
     });
 
@@ -267,5 +288,52 @@ describe("withdrawOwnRequestAction", () => {
 
     expect(nav.redirectedTo).toBe(`/requests?r=${filed.id}`);
     expect(nav.revalidated).toContain("/requests");
+  });
+});
+
+describe("submitLeaveRequestAction — short leave", () => {
+  /**
+   * The action needs no code of its own for this: it already hands
+   * `formBody(form)` to `leaveRequestInputFrom`. That is an assumption, and
+   * an untested assumption about the one seam between the browser and the
+   * service is the one worth pinning.
+   */
+  it("files a short leave with both times and sends the member to /requests", async () => {
+    await run({
+      policyId: shortId,
+      startDate: todayIso(),
+      startTime: "15:00",
+      endTime: "17:00",
+      reason: "Dentist",
+    });
+
+    const stored = await prisma.leaveRequest.findFirst({
+      where: { userId: memberId, policyId: shortId },
+      select: { startTime: true, endTime: true, cost: true },
+    });
+    expect(stored).toMatchObject({ startTime: 900, endTime: 1020, cost: 1 });
+  });
+
+  it("sends a four-hour refusal back to /apply with the message", async () => {
+    const url = await run({
+      policyId: shortId,
+      startDate: todayIso(),
+      startTime: "09:00",
+      endTime: "14:00",
+    });
+
+    expect(url).toContain("/apply?error=");
+    expect(errorIn(url)).toContain("four hours");
+  });
+
+  it("sends a date that is not today back to /apply", async () => {
+    const url = await run({
+      policyId: shortId,
+      startDate: addDays(todayIso(), 1),
+      startTime: "15:00",
+      endTime: "17:00",
+    });
+
+    expect(errorIn(url)).toContain("today");
   });
 });

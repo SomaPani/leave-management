@@ -1,12 +1,12 @@
 // Prisma 7 generates each enum as a const object plus a same-named type, so
 // one plain import gives both the values and the type.
 import {
-  EmploymentStatus,
   type LeaveAccrual,
   LeaveRequestStatus,
   type LeaveUnit,
-  Role,
 } from "@/generated/prisma/enums";
+import { type ApproverRecord, approverFor } from "@/lib/approver";
+import { earnedByYearFor } from "@/lib/comp-off-service";
 import { fromDbDate, toDbDate, todayIso } from "@/lib/attendance";
 import { listHolidays } from "@/lib/holiday-service";
 import {
@@ -17,6 +17,8 @@ import {
   costFrom,
   effectiveEndDate,
   offDates,
+  shortLeaveTimes,
+  timesOverlap,
 } from "@/lib/leave";
 import { prisma } from "@/lib/prisma";
 import {
@@ -74,6 +76,8 @@ export const REQUEST_FIELDS = {
   startDate: true,
   endDate: true,
   cost: true,
+  startTime: true,
+  endTime: true,
   reason: true,
   status: true,
   createdAt: true,
@@ -122,7 +126,7 @@ export type LeaveBalanceRecord = LeavePolicyRecord & {
   balance: number;
 };
 
-export type ApproverRecord = { id: string; name: string } | null;
+export type { ApproverRecord } from "@/lib/approver";
 
 export type LeaveSummary = {
   /** The calendar year `asOf` falls in. */
@@ -138,6 +142,13 @@ export type LeaveRequestInput = {
   startDate: string;
   /** Inclusive. The parser defaults it to `startDate` for a one-day request. */
   endDate: string;
+  /**
+   * Minutes from midnight for a USES request, null for a day-based one. Both
+   * or neither — the parser refuses one without the other, and the
+   * LeaveRequest_times_paired CHECK refuses it again.
+   */
+  startTime: number | null;
+  endTime: number | null;
   reason: string | null;
 };
 
@@ -147,6 +158,13 @@ export type LeaveRequestRecord = {
   startDate: string;
   endDate: string;
   cost: number;
+  /**
+   * Minutes from midnight for a short leave, null for a day-based request.
+   * `formatClockTime` in lib/leave.ts renders them; every screen uses that
+   * one formatter so they cannot drift.
+   */
+  startTime: number | null;
+  endTime: number | null;
   reason: string | null;
   status: LeaveRequestStatus;
   approver: ApproverRecord;
@@ -168,6 +186,8 @@ export type RequestRow = {
   id: string;
   startDate: Date;
   endDate: Date;
+  startTime: number | null;
+  endTime: number | null;
   cost: number;
   reason: string | null;
   status: LeaveRequestStatus;
@@ -205,6 +225,8 @@ export function toRecord(row: RequestRow): LeaveRequestRecord {
     startDate: fromDbDate(row.startDate),
     endDate: fromDbDate(row.endDate),
     cost: row.cost,
+    startTime: row.startTime,
+    endTime: row.endTime,
     reason: row.reason,
     status: row.status,
     approver: row.approver,
@@ -221,27 +243,6 @@ function applicantOrgFor(actor: Actor): string {
     throw new HttpError(403, "Only a member of an organization can apply for leave.");
   }
   return organizationId;
-}
-
-/**
- * Who a request goes to: the applicant's manager, or failing that the
- * organization's longest-standing active admin, or nobody.
- *
- * A fallback rather than a requirement. A one-person organization and a member
- * whose manager has left are both real, and neither should leave somebody
- * unable to file at all.
- */
-async function approverFor(
-  manager: ApproverRecord,
-  organizationId: string,
-): Promise<ApproverRecord> {
-  if (manager) return manager;
-
-  return prisma.user.findFirst({
-    where: { organizationId, role: Role.ADMIN, status: EmploymentStatus.ACTIVE },
-    select: { id: true, name: true },
-    orderBy: { createdAt: "asc" },
-  });
 }
 
 /* --------------------------------------------------------------- reading -- */
@@ -325,7 +326,7 @@ export async function summaryFor(
   // sentence to show an admin who mistyped a member id.
   if (!applicant) throw new HttpError(404, "That member does not exist.");
 
-  const [policies, spent, approver] = await Promise.all([
+  const [policies, spent, approver, earned] = await Promise.all([
     // The policy list is the organization's, not the caller's, so an admin
     // reading a member's balance sees the entitlements that member is
     // actually measured against.
@@ -339,6 +340,11 @@ export async function summaryFor(
       select: { policyId: true, startDate: true, cost: true },
     }),
     approverFor(applicant.manager, organizationId),
+    // Comp-off credit: one day per approved claim, keyed by the year the day
+    // was worked in. Fetched unconditionally rather than only when the
+    // organization has an EARNED policy — the branch would save one small
+    // query on a member's own screen and is one more thing to get wrong.
+    earnedByYearFor(userId),
   ]);
 
   // policy id -> calendar year -> days spent.
@@ -359,7 +365,16 @@ export async function summaryFor(
     asOf,
     balances: policies.map((policy) => ({
       ...policy,
-      ...balanceAsOf(policy, joinedOn, asOf, usedByPolicy.get(policy.id) ?? NO_USAGE),
+      ...balanceAsOf(
+        policy,
+        joinedOn,
+        asOf,
+        usedByPolicy.get(policy.id) ?? NO_USAGE,
+        // Every EARNED policy in an organization draws on the same claims.
+        // There is one such policy today; a second would share this credit
+        // with the first, which is the moment to key claims by policy.
+        policy.accrual === "EARNED" ? earned : NO_USAGE,
+      ),
     })),
     approver,
   };
@@ -468,6 +483,17 @@ export async function createOwnLeaveRequest(
   });
   const cost = costFrom(unit, startDate, endDate, offDates(holidays));
 
+  // Rules 1, 2 and 3 in one call, refusing with the same sentence the apply
+  // form shows beside the inputs — the form imports this very function.
+  const timeRefusal = shortLeaveTimes(
+    unit,
+    input.startTime,
+    input.endTime,
+    startDate,
+    todayIso(),
+  );
+  if (timeRefusal) throw new HttpError(400, timeRefusal);
+
   const approver = await approverFor(applicant.manager, organizationId);
 
   // The overlap check and the insert share a transaction, so two submits
@@ -476,18 +502,43 @@ export async function createOwnLeaveRequest(
   // daterange would close it, and that is a bigger change than this screen
   // justifies today.
   const row = await prisma.$transaction(async (tx) => {
-    const clash = await tx.leaveRequest.findFirst({
+    // Candidates, not a verdict: the date query is what an index can answer,
+    // and the time comparison below is over the handful of rows it returns.
+    const sameDays = await tx.leaveRequest.findMany({
       where: {
         userId: actor.id,
         status: { in: SPENT },
-        // Overlap, not containment: sharing a single day is enough.
+        // Overlap, not containment: sharing a single day is enough to be a
+        // candidate.
         startDate: { lte: toDbDate(endDate) },
         endDate: { gte: toDbDate(startDate) },
       },
-      select: { id: true },
+      select: { id: true, startTime: true, endTime: true },
     });
+
+    const timed = input.startTime !== null && input.endTime !== null;
+    const clash = sameDays.find((existing) => {
+      // Either side being a whole-day absence settles it: there is no
+      // afternoon to take off a day already spent, and no day left to spend
+      // on an afternoon already taken.
+      if (!timed || existing.startTime === null || existing.endTime === null) {
+        return true;
+      }
+      return timesOverlap(
+        input.startTime as number,
+        input.endTime as number,
+        existing.startTime,
+        existing.endTime,
+      );
+    });
+
     if (clash) {
-      throw new HttpError(409, "You already have a request covering those dates.");
+      throw new HttpError(
+        409,
+        timed && clash.startTime !== null
+          ? "You already have a short leave covering those hours."
+          : "You already have a request covering those dates.",
+      );
     }
 
     return tx.leaveRequest.create({
@@ -497,6 +548,8 @@ export async function createOwnLeaveRequest(
         policyId: policy.id,
         startDate: toDbDate(startDate),
         endDate: toDbDate(endDate),
+        startTime: input.startTime,
+        endTime: input.endTime,
         cost,
         reason: input.reason,
         approverId: approver?.id ?? null,

@@ -6,16 +6,21 @@ import {
   HttpError,
   assertOrgInvariant,
   canApplyForLeave,
+  canClaimCompOff,
+  canListCompOffClaims,
   canCreateAdmin,
   canCreateMember,
   canCreateOrganization,
   canDeleteAdmin,
   canDeleteMember,
   canDeleteOrganization,
+  canGrantCompOff,
+  canRevokeCompOffGrant,
   canListAttendance,
   canListHolidays,
   canListLeavePolicies,
   canListLeaveRequests,
+  canReviewCompOff,
   canListMembers,
   canListOrganizations,
   canListRegions,
@@ -392,5 +397,99 @@ describe("listing leave requests across a roster", () => {
 
   it("denies a member — /api/leave-requests stays self-scoped for them", () => {
     expect(canListLeaveRequests(memberA)).toBe(false);
+  });
+});
+
+describe("canClaimCompOff", () => {
+  it("allows a member of an organization", () => {
+    expect(canClaimCompOff(memberA)).toBe(true);
+  });
+
+  it("allows an admin - an admin is a person who works weekends too", () => {
+    expect(canClaimCompOff(adminA)).toBe(true);
+  });
+
+  it("denies a superadmin, who belongs to no organization", () => {
+    expect(canClaimCompOff(superadmin)).toBe(false);
+  });
+
+  it("denies a member with no organization", () => {
+    expect(canClaimCompOff({ ...memberA, organizationId: null })).toBe(false);
+  });
+});
+
+describe("canReviewCompOff", () => {
+  it("allows an admin of the claim's own organization", () => {
+    expect(canReviewCompOff(adminA, ORG_A, memberA.id)).toBe(true);
+  });
+
+  it("denies an admin of a different organization", () => {
+    expect(canReviewCompOff(adminB, ORG_A, memberA.id)).toBe(false);
+  });
+
+  it("denies the claimant their own claim - canClaimCompOff admits admins", () => {
+    expect(canReviewCompOff(adminA, ORG_A, adminA.id)).toBe(false);
+  });
+
+  it("denies a member", () => {
+    expect(canReviewCompOff(memberA, ORG_A, "someone-else")).toBe(false);
+  });
+
+  it("denies a superadmin, who may read a queue but not decide in it", () => {
+    expect(canReviewCompOff(superadmin, ORG_A, memberA.id)).toBe(false);
+  });
+});
+
+describe("canListCompOffClaims", () => {
+  it("allows an admin", () => {
+    expect(canListCompOffClaims(adminA)).toBe(true);
+  });
+
+  it("allows a superadmin, who reads every organization", () => {
+    expect(canListCompOffClaims(superadmin)).toBe(true);
+  });
+
+  it("denies a member - their own claims come from a self-scoped read", () => {
+    expect(canListCompOffClaims(memberA)).toBe(false);
+  });
+});
+
+describe("canGrantCompOff", () => {
+  it("allows an admin granting to a member of their own organization", () => {
+    expect(canGrantCompOff(adminA, memberA.id)).toBe(true);
+  });
+
+  it("allows an admin granting to another admin - admins work weekends too", () => {
+    expect(canGrantCompOff(adminA, "a-colleague")).toBe(true);
+  });
+
+  it("denies an admin granting to themselves - nobody mints their own credit", () => {
+    expect(canGrantCompOff(adminA, adminA.id)).toBe(false);
+  });
+
+  it("denies a member", () => {
+    expect(canGrantCompOff(memberA, "someone-else")).toBe(false);
+  });
+
+  it("denies a superadmin, who belongs to no organization and has no roster", () => {
+    expect(canGrantCompOff(superadmin, memberA.id)).toBe(false);
+  });
+});
+
+describe("canRevokeCompOffGrant", () => {
+  it("allows an admin of the grant's own organization", () => {
+    expect(canRevokeCompOffGrant(adminA, ORG_A)).toBe(true);
+  });
+
+  it("denies an admin of a different organization", () => {
+    expect(canRevokeCompOffGrant(adminB, ORG_A)).toBe(false);
+  });
+
+  it("denies a member", () => {
+    expect(canRevokeCompOffGrant(memberA, ORG_A)).toBe(false);
+  });
+
+  it("denies a superadmin, who grants nothing and so revokes nothing", () => {
+    expect(canRevokeCompOffGrant(superadmin, ORG_A)).toBe(false);
   });
 });

@@ -63,6 +63,10 @@ enum LeaveAccrual {
   UPFRONT
   /// One-twelfth on the first of each month.
   MONTHLY
+  /// Credit comes from approved CompOffClaim rows, not from a schedule.
+  /// `allowance` is ignored; `carry` must be false, enforced by the
+  /// LeavePolicy_earned_lapses CHECK.
+  EARNED
 }
 
 enum LeaveRequestStatus {
@@ -87,6 +91,9 @@ model Organization {
 
   leavePolicies LeavePolicy[]
   leaveRequests LeaveRequest[]
+  compOffClaims CompOffClaim[]
+
+  scores ScoreDay[]
 }
 
 /// An office/location a team is grouped by on the Team screen.
@@ -160,6 +167,13 @@ model User {
   leaveRequests  LeaveRequest[] @relation("LeaveRequestSubject")
   leaveApprovals LeaveRequest[] @relation("LeaveRequestApprover")
   leaveDecisions LeaveRequest[] @relation("LeaveRequestDecider")
+
+  // The same three, for comp-off claims.
+  compOffClaims    CompOffClaim[] @relation("CompOffClaimSubject")
+  compOffApprovals CompOffClaim[] @relation("CompOffClaimApprover")
+  compOffDecisions CompOffClaim[] @relation("CompOffClaimDecider")
+
+  scores ScoreDay[] @relation("ScoreSubject")
 
   phone          String?
   personalEmail  String?
@@ -374,6 +388,18 @@ model LeaveRequest {
   /// re-price a request approved in September.
   cost Int
 
+  /// Minutes from midnight, for a USES request that occupies part of a day:
+  /// 15:00 is 900. Null on every day-based request.
+  ///
+  /// Int rather than @db.Time because these are wall-clock marks with no
+  /// timezone — 3 PM is 3 PM wherever the member sits — and because the
+  /// overlap test and the four-hour cap are then plain integer arithmetic.
+  ///
+  /// Both set or both null: the LeaveRequest_times_paired CHECK enforces it,
+  /// so no reader has to handle a half-timed row.
+  startTime Int?
+  endTime   Int?
+
   reason String?
 
   status LeaveRequestStatus @default(PENDING)
@@ -422,4 +448,181 @@ model LeaveRequest {
   /// The approvals queue: one organization's requests in one state, oldest
   /// filing first.
   @@index([organizationId, status, createdAt])
+}
+
+/// The lifecycle of a comp-off claim. Deliberately not `LeaveRequestStatus`:
+/// the four values coincide today, but the two lifecycles are independent and
+/// a value added to one for its own reasons must not appear in the other by
+/// accident.
+enum CompOffClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+/// Where a comp-off credit came from.
+///
+/// CLAIM is the member asking for a day they worked; ADMIN_GRANT is an admin
+/// crediting it from /setup without being asked. The credit itself is
+/// identical and `earnedByYearFrom` does not read this column — see section
+/// 3.1 of Docs/2026-09-16-comp-off-admin-grant-design.md. It exists for the
+/// audit, and to scope the revoke on /setup so it can never withdraw a claim
+/// a member actually filed.
+enum CompOffSource {
+  CLAIM
+  ADMIN_GRANT
+}
+
+/// One member's claim that they worked a day they were not owed.
+///
+/// An APPROVED claim *is* the credit — there is no separate ledger. The
+/// comp-off balance for a year is the count of approved claims whose
+/// `workedOn` falls in it, less the days spent against the Comp-off policy.
+/// See Docs/2026-09-10-comp-off-design.md section 3.1.
+model CompOffClaim {
+  id String @id @default(cuid())
+
+  /// Denormalised from the claimant's own `User` row, never read from a
+  /// request body — the rule lib/attendance-service.ts and LeaveRequest both
+  /// follow, for the same reason: a tenancy column that trusts a body is a
+  /// tenancy hole.
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("CompOffClaimSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The non-working day that was worked: a weekend, or a holiday in the
+  /// claimant's region, validated at submit against both. Never in the future.
+  ///
+  /// There is deliberately no `@@unique([userId, workedOn])`. The constraint
+  /// is "no PENDING or APPROVED claim for this day" — a rejected day may be
+  /// re-filed — which is a partial index, and is enforced in
+  /// lib/comp-off-service.ts inside the same transaction as the insert.
+  workedOn DateTime @db.Date
+
+  /// What was worked on. Optional, but it is what an approver decides against.
+  reason String?
+
+  status CompOffClaimStatus @default(PENDING)
+
+  /// Who initiated this credit. The default is what makes the migration a
+  /// single ALTER with no data step: every row that existed before grants
+  /// was filed by its own subject, which is exactly `CLAIM`.
+  ///
+  /// An ADMIN_GRANT row is born APPROVED, with `decidedAt` and `decidedById`
+  /// set at insert — there was never a pending state to decide.
+  source CompOffSource @default(CLAIM)
+
+  /// Who it went to at submit — the claimant's manager, or an admin. Routing,
+  /// not permission, and SetNull rather than Restrict for the reason
+  /// `LeaveRequest.approverId` gives: an approver who leaves is deleted, and
+  /// neither blocking that delete nor destroying the history is acceptable.
+  approverId String?
+  approver   User?   @relation("CompOffClaimApprover", fields: [approverId], references: [id], onDelete: SetNull)
+
+  /// When the decision was made. Null while PENDING, and distinct from
+  /// `updatedAt`, which moves for any write.
+  decidedAt DateTime?
+
+  /// The admin who decided — not necessarily `approverId`. Null means that
+  /// admin is gone, never "undecided": `status` and `decidedAt` answer that.
+  decidedById String?
+  decidedBy   User?   @relation("CompOffClaimDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  /// Why. Required by the service on a rejection, optional on an approval —
+  /// a policy about one transition, not an invariant of the row.
+  decisionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The credit query: one member's claims, filtered by status.
+  @@index([userId, status])
+  /// The approvals section: one organization in one state, oldest first.
+  @@index([organizationId, status, createdAt])
+  /// The grant list on /setup: one organization's grants, newest first.
+  @@index([organizationId, source, createdAt])
+}
+
+enum ScoreStatus {
+  SCORED
+  NOT_SCORED
+}
+
+/// One member's performance score for one day, as computed upstream by the
+/// Standup-Automation pipeline and pushed here.
+///
+/// Never computed in this application: the rubric lives in that pipeline's
+/// `scorecard.py` and this is a read model of its output. There is no override
+/// column and no correction workflow — a wrong score is fixed by the upstream
+/// recompute pass re-pushing the day, which upserts on `[userId, date]`.
+///
+/// `organizationId` is denormalised from the member's own `User` row so the
+/// admin screen's hottest query — every score in one organization for one
+/// month — is a single indexed read with no join, exactly as `Attendance`
+/// does. lib/score-service.ts always copies it from the stored user, never
+/// from a request body.
+model ScoreDay {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation("ScoreSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Stored as DATE, not a timestamp: a day has no time and no offset.
+  date DateTime @db.Date
+
+  status ScoreStatus
+  /// Why a day was not scored — "jira: 503", "no roll-call posted for the day".
+  /// Null when SCORED.
+  reason String?
+  /// The upstream attendance label as reported: Present | Half Day | Absent |
+  /// Leave | Weekend | Holiday. Deliberately text rather than this
+  /// application's AttendanceStatus enum: it is the pipeline's reading of a
+  /// Slack roll-call, not a mark an admin made on /attendance, and conflating
+  /// the two would suggest one could be derived from the other.
+  attendance String
+
+  /// One column per check in the rubric. All nullable, and null is the point:
+  /// a NOT_SCORED day has no zeros for a later query to average by mistake.
+  /// Making that invariant structural beats trusting every future reader to
+  /// remember the filter.
+  checkinPts      Float?
+  pickedPts       Float?
+  descriptionPts  Float?
+  commitPts       Float?
+  commentPts      Float?
+  deliveryPts     Float?
+  /// The coordination bonus, awarded on top of the hundred.
+  coordinationPts Float?
+
+  process  Float?
+  delivery Float?
+  /// 0-110, not 0-100: the coordination bonus legitimately exceeds the
+  /// hundred, so there is deliberately no check constraint here.
+  total    Float?
+  band     String?
+
+  tasksPicked  Int?
+  tasksDone    Int?
+  tasksCredit  Float?
+  volumeFactor Float?
+
+  /// Jira keys frozen at capture, and the day's flags: unplanned_work,
+  /// half_day, no_tasks, under_committed, coordinated.
+  pickedTasks String[]
+  flags       String[]
+
+  /// From the scoring run that produced the row, not from our clock.
+  computedAt DateTime
+  receivedAt DateTime @default(now())
+
+  /// The upsert key. A re-push of the same day corrects it in place, which is
+  /// what carries the upstream recompute through to the screen.
+  @@unique([userId, date])
+  @@index([organizationId, date])
 }

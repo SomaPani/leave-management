@@ -1,10 +1,11 @@
 import Link from "next/link";
 
-import { LeaveRequestStatus } from "@/generated/prisma/enums";
+import { CompOffClaimStatus, LeaveRequestStatus } from "@/generated/prisma/enums";
 import { PageHeader } from "@/components/page-header";
 import { Card, EmptyPanel, MonoLabel, StatusBadge } from "@/components/ui";
-import { formatRange } from "@/lib/date";
-import { unitNoun } from "@/lib/leave";
+import { withdrawCompOffClaimAction } from "@/lib/comp-off-actions";
+import { listOwnCompOffClaims } from "@/lib/comp-off-service";
+import { formatWhen, unitNoun } from "@/lib/leave";
 import { withdrawOwnRequestAction } from "@/lib/leave-actions";
 import { listOwnLeaveRequests } from "@/lib/leave-service";
 import { requirePageActor } from "@/lib/page-guards";
@@ -23,12 +24,15 @@ import { requirePageActor } from "@/lib/page-guards";
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ r?: string; error?: string }>;
+  searchParams: Promise<{ r?: string; c?: string; error?: string }>;
 }) {
   const actor = await requirePageActor();
   const params = await searchParams;
 
-  const mine = await listOwnLeaveRequests(actor);
+  const [mine, claims] = await Promise.all([
+    listOwnLeaveRequests(actor),
+    listOwnCompOffClaims(actor),
+  ]);
   const selected = mine.find((request) => request.id === params.r) ?? mine[0] ?? null;
 
   return (
@@ -62,7 +66,12 @@ export default async function RequestsPage({
                 </span>
                 <StatusBadge status={request.status} />
                 <span className="font-mono text-[13px] text-ink-2">
-                  {formatRange(request.startDate, request.endDate)}
+                  {formatWhen(
+                    request.startDate,
+                    request.endDate,
+                    request.startTime,
+                    request.endTime,
+                  )}
                 </span>
                 <span className="text-[13px] text-muted">
                   {request.cost} {unitNoun(request.policy.unit, request.cost)}
@@ -83,7 +92,12 @@ export default async function RequestsPage({
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[17px] font-semibold">
                 {selected.policy.name} ·{" "}
-                {formatRange(selected.startDate, selected.endDate)}
+                {formatWhen(
+                  selected.startDate,
+                  selected.endDate,
+                  selected.startTime,
+                  selected.endTime,
+                )}
               </h2>
               <StatusBadge status={selected.status} />
             </div>
@@ -125,6 +139,52 @@ export default async function RequestsPage({
           <EmptyPanel>Select a request to see what became of it.</EmptyPanel>
         )}
       </div>
+
+      {claims.length > 0 ? (
+        <>
+          <PageHeader
+            title="My comp-off claims"
+            subtitle="Days you worked that were not owed, and what became of them."
+            meta="MEMBER VIEW"
+          />
+
+          <Card className="overflow-hidden">
+            {claims.map((claim) => (
+              <div
+                key={claim.id}
+                className={`grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 border-b border-line px-4 py-3.5 last:border-b-0 ${
+                  claim.id === params.c ? "bg-brand-tint" : "bg-surface"
+                }`}
+              >
+                <span className="font-mono text-[13px] text-ink-2">{claim.workedOn}</span>
+                <StatusBadge status={claim.status} />
+
+                <span className="text-[13px] text-muted text-pretty">
+                  {claim.reason ?? "No reason given."}
+                </span>
+
+                {claim.status === CompOffClaimStatus.PENDING ? (
+                  <form action={withdrawCompOffClaimAction} className="justify-self-end">
+                    <input type="hidden" name="claimId" value={claim.id} />
+                    <button
+                      type="submit"
+                      className="cursor-pointer rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] text-danger transition-colors hover:bg-danger-tint"
+                    >
+                      Withdraw
+                    </button>
+                  </form>
+                ) : (
+                  <span className="justify-self-end text-[13px] text-muted text-pretty">
+                    {claim.status === CompOffClaimStatus.WITHDRAWN
+                      ? "You took this back."
+                      : (claim.decisionNote ?? "Decided.")}
+                  </span>
+                )}
+              </div>
+            ))}
+          </Card>
+        </>
+      ) : null}
     </>
   );
 }

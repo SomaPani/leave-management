@@ -9,7 +9,15 @@ import {
   selectClass,
   textareaClass,
 } from "@/components/ui";
-import { type LeaveUnitName, costFrom, unitNoun } from "@/lib/leave";
+import {
+  MAX_SHORT_LEAVE_MINUTES,
+  type LeaveUnitName,
+  costFrom,
+  formatClockTime,
+  parseClockTime,
+  shortLeaveTimes,
+  unitNoun,
+} from "@/lib/leave";
 
 export type ApplyOption = {
   id: string;
@@ -29,6 +37,7 @@ export function ApplyForm({
   holidayDates,
   defaultFrom,
   defaultTo,
+  today,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   options: ApplyOption[];
@@ -37,10 +46,14 @@ export function ApplyForm({
   holidayDates: string[];
   defaultFrom: string;
   defaultTo: string;
+  /** The server's today, so a short leave cannot be dated anywhere else. */
+  today: string;
 }) {
   const [policyId, setPolicyId] = useState(options[0]?.id ?? "");
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
 
   const off = useMemo(() => new Set(holidayDates), [holidayDates]);
 
@@ -48,12 +61,28 @@ export function ApplyForm({
   const unit: LeaveUnitName = option?.unit ?? "DAYS";
   const isUses = unit === "USES";
 
+  // A short leave is for today, so the date stops being a choice. Snapping it
+  // in the render rather than in an effect keeps the posted value and the
+  // shown value the same on the very first frame — an effect would submit
+  // whatever the previous selection left behind if the member is quick.
+  const start = isUses ? today : from;
+  const end = isUses ? start : to;
   // `costFrom` is the same function lib/leave-service.ts prices the row with,
   // so the number under the button and the number in the database cannot
   // disagree.
-  const end = isUses ? from : to;
-  const cost = costFrom(unit, from, end, off);
-  const holidayDays = costFrom(unit, from, end, NO_HOLIDAYS) - cost;
+  const cost = costFrom(unit, start, end, off);
+  const holidayDays = costFrom(unit, start, end, NO_HOLIDAYS) - cost;
+
+  const startMinutes = parseClockTime(startTime);
+  const endMinutes = parseClockTime(endTime);
+  // The same function lib/leave-service.ts refuses with, so the sentence the
+  // member reads beside the inputs is the sentence the server would have
+  // sent — not a second copy of the rule that drifts from it.
+  const timeRefusal = isUses
+    ? shortLeaveTimes(unit, startMinutes, endMinutes, start, today)
+    : null;
+  const spanMinutes =
+    startMinutes !== null && endMinutes !== null ? endMinutes - startMinutes : 0;
 
   const balance = option?.balance ?? 0;
   const after = balance - cost;
@@ -82,11 +111,19 @@ export function ApplyForm({
             From
             <input
               type="date"
-              name="startDate"
-              value={from}
+              // A disabled control is not submitted, so the visible input
+              // loses its name when it locks and the hidden one below carries
+              // the date instead. Without that the post arrives with no
+              // startDate at all and the parser refuses it — the one thing
+              // that makes locking the field different from disabling `To`,
+              // which the parser is happy to default.
+              name={isUses ? undefined : "startDate"}
+              value={start}
+              disabled={isUses}
               onChange={(event) => setFrom(event.target.value)}
-              className={inputClass}
+              className={`${inputClass} disabled:text-muted`}
             />
+            {isUses ? <input type="hidden" name="startDate" value={start} /> : null}
           </label>
 
           <label className="flex flex-col gap-1.5 text-xs text-muted">
@@ -103,10 +140,47 @@ export function ApplyForm({
         </div>
 
         {isUses ? (
-          <p className="rounded-lg bg-subtle px-3 py-2.5 text-[12.5px] text-muted">
-            One {option?.name.toLowerCase() ?? "occurrence"} on{" "}
-            {from || "the selected day"} — no need to set an end date.
-          </p>
+          <>
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-xs text-muted">
+                Start time
+                <input
+                  type="time"
+                  name="startTime"
+                  value={startTime}
+                  required
+                  onChange={(event) => setStartTime(event.target.value)}
+                  className={inputClass}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-xs text-muted">
+                End time
+                <input
+                  type="time"
+                  name="endTime"
+                  value={endTime}
+                  required
+                  onChange={(event) => setEndTime(event.target.value)}
+                  className={inputClass}
+                />
+              </label>
+            </div>
+
+            {timeRefusal ? (
+              <p className="rounded-lg border border-danger-line bg-danger-tint px-3.5 py-2.5 text-[12.5px] text-danger">
+                {timeRefusal}
+              </p>
+            ) : (
+              <p className="rounded-lg bg-subtle px-3 py-2.5 text-[12.5px] text-muted">
+                {spanMinutes > 0
+                  ? `${formatClockTime(startMinutes as number)} – ${formatClockTime(
+                      endMinutes as number,
+                    )} today, ${spanMinutes} minutes.`
+                  : `Today only, up to ${MAX_SHORT_LEAVE_MINUTES / 60} hours.`}
+              </p>
+            )}
+          </>
         ) : null}
 
         {holidayDays > 0 ? (
@@ -128,7 +202,11 @@ export function ApplyForm({
         </label>
 
         <div className="flex flex-wrap items-center gap-3.5 border-t border-line pt-4">
-          <button type="submit" className={primaryButtonClass}>
+          <button
+            type="submit"
+            disabled={timeRefusal !== null}
+            className={primaryButtonClass}
+          >
             Submit request
           </button>
           <span className="text-[13px] text-muted">

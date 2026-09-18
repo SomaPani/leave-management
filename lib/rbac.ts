@@ -232,6 +232,93 @@ export function canListLeaveRequests(actor: Actor): boolean {
   return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
 }
 
+/**
+ * Filing a comp-off claim follows `canApplyForLeave` exactly, and for the
+ * same reason: an ADMIN is admitted because an admin is a person, and a
+ * person who works a Sunday has earned the same day back. A SUPERADMIN
+ * belongs to no organization and appears on no roster, so there is nothing
+ * for them to claim.
+ */
+export function canClaimCompOff(actor: Actor): boolean {
+  return (
+    (actor.role === Role.ADMIN || actor.role === Role.MEMBER) &&
+    actor.organizationId !== null
+  );
+}
+
+/**
+ * Deciding a claim follows `canReviewLeave`, down to its one accepted
+ * failure: the claimant is excluded even when they are the admin, so in a
+ * one-admin organization that admin's own claim cannot be decided by anybody.
+ * Approving your own entitlement is the worse of the two.
+ *
+ * Pass the *stored* `CompOffClaim.organizationId` and `userId`, never
+ * anything that arrived in a request body.
+ */
+export function canReviewCompOff(
+  actor: Actor,
+  claimOrganizationId: string,
+  claimantId: string,
+): boolean {
+  return (
+    actor.role === Role.ADMIN &&
+    actor.organizationId === claimOrganizationId &&
+    actor.id !== claimantId
+  );
+}
+
+/**
+ * Reading the claim queue follows `canListLeaveRequests`, not
+ * `canReviewCompOff`: a SuperAdmin sees every organization, so they may read
+ * the claims inside one even though they cannot decide them. Scope the query
+ * with `visibleOrgId`.
+ *
+ * A MEMBER is excluded. Their own claims come from `listOwnCompOffClaims` in
+ * lib/comp-off-service.ts, which takes no id and therefore has no id to
+ * tamper with.
+ */
+export function canListCompOffClaims(actor: Actor): boolean {
+  return actor.role === Role.SUPERADMIN || actor.role === Role.ADMIN;
+}
+
+/**
+ * Granting a comp-off from /setup: an admin credits a day to a colleague
+ * without waiting for them to claim it.
+ *
+ * The grantee is excluded from being the grantor, for the reason
+ * `canReviewCompOff` excludes the claimant — nobody mints their own credit.
+ * An admin who worked a Sunday files a claim like anybody else and another
+ * admin decides it.
+ *
+ * Every other colleague is fair game, admins included: `canClaimCompOff`
+ * already admits an ADMIN on the grounds that an admin is a person who works
+ * weekends, and a grant cannot be narrower than the claim it stands in for.
+ *
+ * A SUPERADMIN is denied. They belong to no organization, so there is no
+ * roster to grant from and no organization to charge the credit to.
+ */
+export function canGrantCompOff(actor: Actor, granteeId: string): boolean {
+  return (
+    actor.role === Role.ADMIN &&
+    actor.organizationId !== null &&
+    actor.id !== granteeId
+  );
+}
+
+/**
+ * Revoking a grant is the same authority as making one, minus the grantee:
+ * the row already exists, so the organization is read from it rather than
+ * from anything a caller sent.
+ *
+ * Whether the row is a *grant* at all — rather than a claim the member filed
+ * — is not a question about the actor, so it is not asked here. The service
+ * scopes its update to `source = ADMIN_GRANT`, which is where a fact about
+ * the row belongs.
+ */
+export function canRevokeCompOffGrant(actor: Actor, grantOrganizationId: string): boolean {
+  return actor.role === Role.ADMIN && actor.organizationId === grantOrganizationId;
+}
+
 export function canListOrganizations(actor: Actor): boolean {
   return actor.role === Role.SUPERADMIN;
 }
