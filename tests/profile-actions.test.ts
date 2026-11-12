@@ -70,7 +70,9 @@ const row = (id: string) =>
       title: true,
       empId: true,
       address: true,
+      permanentAddress: true,
       phone: true,
+      workMode: true,
       personalEmail: true,
       emergencyName: true,
       emergencyPhone: true,
@@ -113,12 +115,14 @@ afterAll(async () => {
 });
 
 describe("updateOwnContactAction", () => {
-  it("saves the four contact fields on the signed-in member's own row", async () => {
+  it("saves the contact fields and both addresses on the signed-in member's own row", async () => {
     const url = await run({
       personalEmail: "Me@Personal.Test",
       phone: "+91 90000 00001",
       emergencyName: "Parent",
       emergencyPhone: "+91 90000 00002",
+      address: "12 Current Lane, Delhi",
+      permanentAddress: "9 Home Street, Shimla",
     });
 
     expect(url).toBe("/profile");
@@ -128,17 +132,26 @@ describe("updateOwnContactAction", () => {
       phone: "+91 90000 00001",
       emergencyName: "Parent",
       emergencyPhone: "+91 90000 00002",
+      address: "12 Current Lane, Delhi",
+      permanentAddress: "9 Home Street, Shimla",
     });
   });
 
   it("clears a field submitted blank", async () => {
-    await run({ personalEmail: "", phone: "", emergencyName: "Parent", emergencyPhone: "" });
+    await run({
+      personalEmail: "",
+      phone: "",
+      emergencyName: "Parent",
+      emergencyPhone: "",
+      permanentAddress: "",
+    });
 
     expect(await row(me.id)).toMatchObject({
       personalEmail: null,
       phone: null,
       emergencyName: "Parent",
       emergencyPhone: null,
+      permanentAddress: null,
     });
   });
 
@@ -151,14 +164,14 @@ describe("updateOwnContactAction", () => {
     expect(await row(me.id)).toEqual(before);
   });
 
-  it("ignores every field outside the four, however the form is crafted", async () => {
+  it("ignores every field outside the editable ones, however the form is crafted", async () => {
     const url = await run({
       phone: "+91 90000 00003",
       name: "Renamed",
       email: email("hijack"),
       title: "CEO",
       empId: "X-1",
-      address: "Somewhere else",
+      workMode: "WFO",
       regionId: "anything",
       managerId: "anything",
       id: colleague.id,
@@ -170,7 +183,7 @@ describe("updateOwnContactAction", () => {
       email: email("me"),
       title: "Developer",
       empId: `${RUN}-me`,
-      address: "1 Test Road",
+      workMode: null,
       phone: "+91 90000 00003",
     });
   });

@@ -45,7 +45,8 @@ export function memberProfileFrom(body: Record<string, unknown>): MemberProfileI
 }
 
 /**
- * The four fields a member may change on their own /profile.
+ * The fields a member may change on their own /profile: contact, both
+ * addresses and the emergency contact.
  *
  * Picked by name rather than by dropping the rest of `memberProfileFrom`, so a
  * field added to the Team profile later stays admin-only until it is listed
@@ -55,6 +56,8 @@ export function ownContactFrom(body: Record<string, unknown>): OwnContactInput {
   return {
     personalEmail: patchNullableEmail(body, "personalEmail"),
     phone: patchNullableString(body, "phone"),
+    address: patchNullableString(body, "address"),
+    permanentAddress: patchNullableString(body, "permanentAddress"),
     emergencyName: patchNullableString(body, "emergencyName"),
     emergencyPhone: patchNullableString(body, "emergencyPhone"),
   };

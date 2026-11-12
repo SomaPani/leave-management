@@ -8,6 +8,7 @@ import {
   ghostButtonClass,
   inputClass,
   primaryButtonClass,
+  textareaClass,
 } from "@/components/ui";
 import { formatDayMonthYear } from "@/lib/date";
 import { initialsFor } from "@/lib/domain";
@@ -19,8 +20,8 @@ import { ownProfileDetails } from "@/lib/services";
  * Member: their own record on file.
  *
  * Every value is the signed-in member's own row via `ownProfileDetails`; a
- * field nobody has filled in shows a dash. The member may edit their contact
- * and emergency details (`?edit=1` opens the form); identity, role and
+ * field nobody has filled in shows a dash. The member may edit their contact,
+ * address and emergency details (`?edit=1` opens the form); identity, role and
  * reporting fields stay with the admin on /team.
  */
 export default async function ProfilePage({
@@ -42,7 +43,13 @@ export default async function ProfilePage({
         { label: "Work email", value: user.email },
         { label: "Other email", value: user.personalEmail ?? "—" },
         { label: "Contact number", value: user.phone ?? "—" },
-        { label: "Address", value: user.address ?? "—" },
+      ],
+    },
+    {
+      section: "ADDRESS",
+      items: [
+        { label: "Current address", value: user.address ?? "—" },
+        { label: "Permanent address", value: user.permanentAddress ?? "—" },
       ],
     },
     {
@@ -145,8 +152,9 @@ function Labelled({ label, children }: { label: string; children: React.ReactNod
 }
 
 /**
- * The four fields a member may change. Each input carries its current value,
- * so a box left blank on purpose clears that field.
+ * The fields a member may change: contact, both addresses and the emergency
+ * contact. Each input carries its current value, so a box left blank on
+ * purpose clears that field.
  */
 function ContactForm({
   user,
@@ -179,7 +187,29 @@ function ContactForm({
               className={inputClass}
             />
           </Labelled>
-          <Detail label="Address" value={user.address ?? "—"} />
+        </div>
+
+        <MonoLabel>ADDRESS</MonoLabel>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-7 gap-y-4">
+          <Labelled label="Current address">
+            <textarea
+              name="address"
+              rows={3}
+              defaultValue={user.address ?? ""}
+              placeholder="Where you live now"
+              autoComplete="street-address"
+              className={textareaClass}
+            />
+          </Labelled>
+          <Labelled label="Permanent address">
+            <textarea
+              name="permanentAddress"
+              rows={3}
+              defaultValue={user.permanentAddress ?? ""}
+              placeholder="Your home address on record"
+              className={textareaClass}
+            />
+          </Labelled>
         </div>
 
         <MonoLabel>EMERGENCY</MonoLabel>

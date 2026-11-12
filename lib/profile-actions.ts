@@ -14,7 +14,7 @@ import { updateOwnContact } from "@/lib/services";
  *
  * Re-authenticates for the same reason lib/team-actions.ts does. The row is
  * always the actor's own — no id is read from the form — and `ownContactFrom`
- * reads only the four editable fields, so anything else posted is ignored.
+ * reads only the editable fields, so anything else posted is ignored.
  */
 export async function updateOwnContactAction(form: FormData): Promise<void> {
   try {

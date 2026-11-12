@@ -362,6 +362,7 @@ export async function ownProfileDetails(actor: Actor) {
       phone: true,
       personalEmail: true,
       address: true,
+      permanentAddress: true,
       emergencyName: true,
       emergencyPhone: true,
       region: { select: { name: true } },
@@ -383,6 +384,8 @@ export async function ownProfileDetails(actor: Actor) {
 export type OwnContactInput = {
   personalEmail?: string | null;
   phone?: string | null;
+  address?: string | null;
+  permanentAddress?: string | null;
   emergencyName?: string | null;
   emergencyPhone?: string | null;
 };
@@ -396,12 +399,13 @@ export type OwnContactInput = {
  */
 export async function updateOwnContact(actor: Actor, input: OwnContactInput) {
   assertSomethingToUpdate(input);
-  const { personalEmail, phone, emergencyName, emergencyPhone } = input;
+  const { personalEmail, phone, address, permanentAddress, emergencyName, emergencyPhone } =
+    input;
 
   await prisma.user.update({
     where: { id: actor.id },
     select: { id: true },
-    data: { personalEmail, phone, emergencyName, emergencyPhone },
+    data: { personalEmail, phone, address, permanentAddress, emergencyName, emergencyPhone },
   });
   return ownProfileDetails(actor);
 }

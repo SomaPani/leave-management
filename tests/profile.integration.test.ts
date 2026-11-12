@@ -57,6 +57,7 @@ beforeAll(async () => {
       phone: "+91 90000 00000",
       personalEmail: "sahil@personal.test",
       address: "1 Test Road, Delhi",
+      permanentAddress: "9 Home Street, Shimla",
       emergencyName: "Parent",
       emergencyPhone: "+91 91111 11111",
     },
@@ -99,6 +100,7 @@ describe("ownProfileDetails", () => {
       phone: "+91 90000 00000",
       personalEmail: "sahil@personal.test",
       address: "1 Test Road, Delhi",
+      permanentAddress: "9 Home Street, Shimla",
       emergencyName: "Parent",
       emergencyPhone: "+91 91111 11111",
     });
@@ -116,6 +118,7 @@ describe("ownProfileDetails", () => {
       manager: null,
       phone: null,
       address: null,
+      permanentAddress: null,
       emergencyName: null,
     });
   });
