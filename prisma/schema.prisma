@@ -175,11 +175,14 @@ model User {
 
   scores ScoreDay[] @relation("ScoreSubject")
 
-  phone          String?
-  personalEmail  String?
-  address        String?
-  emergencyName  String?
-  emergencyPhone String?
+  phone            String?
+  personalEmail    String?
+  /// Where the person lives now; shown as "Current address".
+  address          String?
+  /// Home address on record, when it differs from the current one.
+  permanentAddress String?
+  emergencyName    String?
+  emergencyPhone   String?
 
   // Employee ids are unique per organization, not globally. Postgres treats
   // NULLs as distinct, so members without one do not collide.
@@ -576,10 +579,10 @@ model ScoreDay {
   /// Stored as DATE, not a timestamp: a day has no time and no offset.
   date DateTime @db.Date
 
-  status ScoreStatus
+  status     ScoreStatus
   /// Why a day was not scored — "jira: 503", "no roll-call posted for the day".
   /// Null when SCORED.
-  reason String?
+  reason     String?
   /// The upstream attendance label as reported: Present | Half Day | Absent |
   /// Leave | Weekend | Holiday. Deliberately text rather than this
   /// application's AttendanceStatus enum: it is the pipeline's reading of a

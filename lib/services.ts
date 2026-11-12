@@ -1,4 +1,5 @@
 import { EmploymentStatus, Role, WorkMode } from "@/generated/prisma/enums";
+import { fromDbDate } from "@/lib/attendance";
 import { hashPassword, isAcceptablePassword, MIN_PASSWORD_LENGTH } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
@@ -337,6 +338,76 @@ export async function ownProfile(actor: Actor) {
   });
   if (!user) throw new HttpError(401, "Your account no longer exists.");
   return user;
+}
+
+/**
+ * Everything /profile shows about the signed-in person.
+ *
+ * Kept apart from `ownProfile` because that one runs on every member page for
+ * the sidebar; this one reads the whole record once, on the page that needs it.
+ * Same contract — the actor's own id, nothing to authorize. Relations come back
+ * flattened to names and the joining date as an ISO day, so the page formats
+ * rather than unpacks.
+ */
+export async function ownProfileDetails(actor: Actor) {
+  const user = await prisma.user.findUnique({
+    where: { id: actor.id },
+    select: {
+      name: true,
+      email: true,
+      title: true,
+      empId: true,
+      joinedOn: true,
+      workMode: true,
+      phone: true,
+      personalEmail: true,
+      address: true,
+      permanentAddress: true,
+      emergencyName: true,
+      emergencyPhone: true,
+      region: { select: { name: true } },
+      manager: { select: { name: true } },
+    },
+  });
+  if (!user) throw new HttpError(401, "Your account no longer exists.");
+
+  const { region, manager, joinedOn, ...rest } = user;
+  return {
+    ...rest,
+    joinedOn: joinedOn ? fromDbDate(joinedOn) : null,
+    region: region?.name ?? null,
+    manager: manager?.name ?? null,
+  };
+}
+
+/** What a member may change about themselves; see `ownContactFrom`. */
+export type OwnContactInput = {
+  personalEmail?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  permanentAddress?: string | null;
+  emergencyName?: string | null;
+  emergencyPhone?: string | null;
+};
+
+/**
+ * The signed-in person updates their own contact details.
+ *
+ * Like `ownProfileDetails`, the only row it can reach is the actor's, so there
+ * is no policy check. The input type is the whole allow-list: identity, role
+ * and reporting fields stay with the admin on /team.
+ */
+export async function updateOwnContact(actor: Actor, input: OwnContactInput) {
+  assertSomethingToUpdate(input);
+  const { personalEmail, phone, address, permanentAddress, emergencyName, emergencyPhone } =
+    input;
+
+  await prisma.user.update({
+    where: { id: actor.id },
+    select: { id: true },
+    data: { personalEmail, phone, address, permanentAddress, emergencyName, emergencyPhone },
+  });
+  return ownProfileDetails(actor);
 }
 
 /* ------------------------------------------------- update and delete --- */

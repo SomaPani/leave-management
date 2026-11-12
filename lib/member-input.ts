@@ -6,7 +6,7 @@ import {
   patchNullableString,
 } from "@/lib/api";
 import { HttpError } from "@/lib/rbac";
-import type { MemberProfileInput } from "@/lib/services";
+import type { MemberProfileInput, OwnContactInput } from "@/lib/services";
 
 /**
  * Reading a member's Team profile out of a JSON request body.
@@ -39,6 +39,25 @@ export function memberProfileFrom(body: Record<string, unknown>): MemberProfileI
     phone: patchNullableString(body, "phone"),
     personalEmail: patchNullableEmail(body, "personalEmail"),
     address: patchNullableString(body, "address"),
+    emergencyName: patchNullableString(body, "emergencyName"),
+    emergencyPhone: patchNullableString(body, "emergencyPhone"),
+  };
+}
+
+/**
+ * The fields a member may change on their own /profile: contact, both
+ * addresses and the emergency contact.
+ *
+ * Picked by name rather than by dropping the rest of `memberProfileFrom`, so a
+ * field added to the Team profile later stays admin-only until it is listed
+ * here on purpose.
+ */
+export function ownContactFrom(body: Record<string, unknown>): OwnContactInput {
+  return {
+    personalEmail: patchNullableEmail(body, "personalEmail"),
+    phone: patchNullableString(body, "phone"),
+    address: patchNullableString(body, "address"),
+    permanentAddress: patchNullableString(body, "permanentAddress"),
     emergencyName: patchNullableString(body, "emergencyName"),
     emergencyPhone: patchNullableString(body, "emergencyPhone"),
   };

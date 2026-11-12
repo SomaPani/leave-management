@@ -96,6 +96,13 @@ export function formatDayMonth(iso: string): string {
   return `${p.d} ${MONTH_SHORT[p.m]}`;
 }
 
+/** `2024-02-03` → `3 Feb 2024`. */
+export function formatDayMonthYear(iso: string): string {
+  const p = parts(iso);
+  if (!p) return "—";
+  return `${p.d} ${MONTH_SHORT[p.m]} ${p.y}`;
+}
+
 /** `2026-08-17` → `Monday, August 17`. */
 export function formatLong(iso: string): string {
   const p = parts(iso);
