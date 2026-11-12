@@ -379,6 +379,33 @@ export async function ownProfileDetails(actor: Actor) {
   };
 }
 
+/** What a member may change about themselves; see `ownContactFrom`. */
+export type OwnContactInput = {
+  personalEmail?: string | null;
+  phone?: string | null;
+  emergencyName?: string | null;
+  emergencyPhone?: string | null;
+};
+
+/**
+ * The signed-in person updates their own contact details.
+ *
+ * Like `ownProfileDetails`, the only row it can reach is the actor's, so there
+ * is no policy check. The input type is the whole allow-list: identity, role
+ * and reporting fields stay with the admin on /team.
+ */
+export async function updateOwnContact(actor: Actor, input: OwnContactInput) {
+  assertSomethingToUpdate(input);
+  const { personalEmail, phone, emergencyName, emergencyPhone } = input;
+
+  await prisma.user.update({
+    where: { id: actor.id },
+    select: { id: true },
+    data: { personalEmail, phone, emergencyName, emergencyPhone },
+  });
+  return ownProfileDetails(actor);
+}
+
 /* ------------------------------------------------- update and delete --- */
 
 /**

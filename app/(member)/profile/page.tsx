@@ -1,20 +1,37 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/page-header";
-import { Card, Detail, MonoLabel } from "@/components/ui";
+import {
+  Card,
+  Detail,
+  MonoLabel,
+  ghostButtonClass,
+  inputClass,
+  primaryButtonClass,
+} from "@/components/ui";
 import { formatDayMonthYear } from "@/lib/date";
 import { initialsFor } from "@/lib/domain";
 import { requirePageActor } from "@/lib/page-guards";
+import { updateOwnContactAction } from "@/lib/profile-actions";
 import { ownProfileDetails } from "@/lib/services";
 
 /**
  * Member: their own record on file.
  *
- * Read-only by design — the subtitle sends changes to the admin, who edits the
- * same fields from /team. Every value is the signed-in member's own row via
- * `ownProfileDetails`; a field nobody has filled in shows a dash.
+ * Every value is the signed-in member's own row via `ownProfileDetails`; a
+ * field nobody has filled in shows a dash. The member may edit their contact
+ * and emergency details (`?edit=1` opens the form); identity, role and
+ * reporting fields stay with the admin on /team.
  */
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string; error?: string }>;
+}) {
   const actor = await requirePageActor();
+  const params = await searchParams;
   const user = await ownProfileDetails(actor);
+  const editing = params.edit === "1";
 
   const joined = user.joinedOn ? formatDayMonthYear(user.joinedOn) : "—";
 
@@ -51,9 +68,18 @@ export default async function ProfilePage() {
     <>
       <PageHeader
         title="My profile"
-        subtitle="Your record on file. Ask your admin to change anything here."
+        subtitle="Your record on file. Keep your contact details current; ask your admin to change anything else."
         meta="MEMBER VIEW"
       />
+
+      {params.error ? (
+        <p
+          role="alert"
+          className="max-w-[900px] rounded-lg border border-danger-line bg-danger-tint px-3.5 py-2.5 text-[13px] text-danger"
+        >
+          {params.error}
+        </p>
+      ) : null}
 
       <div className="flex max-w-[900px] flex-col gap-5">
         <Card className="flex flex-wrap items-center gap-6 px-7 py-6">
@@ -82,17 +108,110 @@ export default async function ProfilePage() {
           </dl>
         </Card>
 
-        {groups.map((group) => (
-          <Card key={group.section} className="flex flex-col gap-3.5 p-5">
-            <MonoLabel>{group.section}</MonoLabel>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-7 gap-y-4">
-              {group.items.map((item) => (
-                <Detail key={item.label} label={item.label} value={item.value} />
-              ))}
-            </div>
-          </Card>
-        ))}
+        {editing ? (
+          <ContactForm user={user} />
+        ) : (
+          <div className="flex justify-end">
+            <Link href="/profile?edit=1" className={ghostButtonClass}>
+              Edit contact details
+            </Link>
+          </div>
+        )}
+
+        {groups
+          .filter((group) => !editing || group.section === "ROLE")
+          .map((group) => (
+            <Card key={group.section} className="flex flex-col gap-3.5 p-5">
+              <MonoLabel>{group.section}</MonoLabel>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-7 gap-y-4">
+                {group.items.map((item) => (
+                  <Detail key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+            </Card>
+          ))}
       </div>
     </>
+  );
+}
+
+function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5 text-xs text-muted">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+/**
+ * The four fields a member may change. Each input carries its current value,
+ * so a box left blank on purpose clears that field.
+ */
+function ContactForm({
+  user,
+}: {
+  user: Awaited<ReturnType<typeof ownProfileDetails>>;
+}) {
+  return (
+    <Card className="p-5">
+      <form action={updateOwnContactAction} className="flex flex-col gap-5">
+        <MonoLabel>CONTACT</MonoLabel>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-7 gap-y-4">
+          <Detail label="Work email" value={user.email} />
+          <Labelled label="Other email">
+            <input
+              name="personalEmail"
+              type="email"
+              defaultValue={user.personalEmail ?? ""}
+              placeholder="you@example.com"
+              autoComplete="email"
+              className={inputClass}
+            />
+          </Labelled>
+          <Labelled label="Contact number">
+            <input
+              name="phone"
+              type="tel"
+              defaultValue={user.phone ?? ""}
+              placeholder="+91 98765 43210"
+              autoComplete="tel"
+              className={inputClass}
+            />
+          </Labelled>
+          <Detail label="Address" value={user.address ?? "—"} />
+        </div>
+
+        <MonoLabel>EMERGENCY</MonoLabel>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-7 gap-y-4">
+          <Labelled label="Contact name">
+            <input
+              name="emergencyName"
+              defaultValue={user.emergencyName ?? ""}
+              placeholder="Name (relationship)"
+              className={inputClass}
+            />
+          </Labelled>
+          <Labelled label="Contact number">
+            <input
+              name="emergencyPhone"
+              type="tel"
+              defaultValue={user.emergencyPhone ?? ""}
+              placeholder="+91 98765 43210"
+              className={inputClass}
+            />
+          </Labelled>
+        </div>
+
+        <div className="flex gap-3 border-t border-line pt-4">
+          <button type="submit" className={primaryButtonClass}>
+            Save
+          </button>
+          <Link href="/profile" className={ghostButtonClass}>
+            Cancel
+          </Link>
+        </div>
+      </form>
+    </Card>
   );
 }
