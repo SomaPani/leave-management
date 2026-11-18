@@ -21,7 +21,7 @@ import { auth } from "@/lib/auth";
 
 const HOME_FOR_ROLE = {
   SUPERADMIN: "/organizations",
-  ADMIN: "/approvals",
+  ADMIN: "/dashboard",
   MEMBER: "/overview",
 } as const;
 
@@ -29,6 +29,7 @@ const HOME_FOR_ROLE = {
 const ALLOWED: { prefix: string; roles: readonly string[] }[] = [
   { prefix: "/organizations", roles: ["SUPERADMIN"] },
   { prefix: "/admins", roles: ["SUPERADMIN"] },
+  { prefix: "/dashboard", roles: ["ADMIN"] },
   { prefix: "/approvals", roles: ["ADMIN"] },
   { prefix: "/attendance", roles: ["ADMIN"] },
   { prefix: "/team", roles: ["ADMIN"] },
@@ -65,6 +66,7 @@ export default auth((request) => {
 
 export const config = {
   matcher: [
+    "/dashboard/:path*",
     "/approvals/:path*",
     "/attendance/:path*",
     "/team/:path*",

@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui";
 import { SidebarNav, type NavItem } from "@/components/sidebar-nav";
 
 const ADMIN_NAV: NavItem[] = [
+  { href: "/dashboard", label: "Overview" },
   { href: "/approvals", label: "Approvals" },
   { href: "/attendance", label: "Attendance" },
   { href: "/team", label: "Team" },

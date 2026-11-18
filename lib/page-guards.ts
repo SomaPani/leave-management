@@ -15,7 +15,7 @@ import type { Actor } from "@/lib/rbac";
 
 export const HOME_FOR_ROLE: Record<Role, string> = {
   SUPERADMIN: "/organizations",
-  ADMIN: "/approvals",
+  ADMIN: "/dashboard",
   MEMBER: "/overview",
 };
 

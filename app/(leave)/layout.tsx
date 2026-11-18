@@ -24,6 +24,7 @@ import { COMPANY_NAME } from "@/lib/seed";
  */
 
 const NAV: NavItem[] = [
+  { href: "/dashboard", label: "Overview" },
   { href: "/approvals", label: "Approvals" },
   { href: "/attendance", label: "Attendance" },
   { href: "/team", label: "Team" },
