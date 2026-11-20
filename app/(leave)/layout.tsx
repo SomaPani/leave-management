@@ -31,6 +31,7 @@ const NAV: NavItem[] = [
   { href: "/setup", label: "Leave setup" },
   { href: "/scores", label: "Employee score board" },
   { href: "/holidays", label: "Holiday calendar" },
+  { href: "/employee-dashboard", label: "Employee dashboard" },
 ];
 
 export default async function LeaveLayout({
@@ -61,8 +62,8 @@ export default async function LeaveLayout({
     .join("");
 
   return (
-    <div className="grid min-h-screen grid-cols-[236px_minmax(0,1fr)]">
-      <aside className="sticky top-0 flex h-screen flex-col gap-7 bg-brand-deep px-4 py-6 text-white">
+    <div className="grid min-h-screen grid-cols-[236px_minmax(0,1fr)] print:block">
+      <aside className="sticky top-0 flex h-screen print:hidden flex-col gap-7 bg-brand-deep px-4 py-6 text-white">
         <div className="px-2 font-mono text-xs tracking-[0.16em] text-brand-mute uppercase">
           {COMPANY_NAME}
         </div>
@@ -94,7 +95,7 @@ export default async function LeaveLayout({
         </div>
       </aside>
 
-      <main className="flex min-w-0 max-w-[1180px] flex-col gap-7 px-10 pt-9 pb-16">
+      <main className="flex min-w-0 max-w-[1180px] flex-col gap-7 px-10 pt-9 pb-16 print:max-w-none print:p-0">
         {children}
       </main>
     </div>

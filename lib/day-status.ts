@@ -37,7 +37,7 @@ export type DayFacts = {
 
 export type ResolvedDay = { date: string; kind: DayKind; detail: string | null };
 
-const MODIFIER_DETAIL: Record<AttendanceModifier, string> = {
+export const MODIFIER_DETAIL: Record<AttendanceModifier, string> = {
   HALF_DAY: "Half day",
   SHORT_LEAVE: "Short leave",
 };
