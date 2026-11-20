@@ -177,6 +177,67 @@ export async function todayOverview(
   };
 }
 
+export type TeamPerson = OverviewMember & { days: ResolvedDay[] };
+
+/**
+ * Everyone's days over a period, for the Employee dashboard.
+ *
+ * `memberId` and `regionId` narrow `people` only; `everyone` and `regions`
+ * stay whole so the filter dropdowns can still offer the other choices. Both
+ * filters are ANDed with the caller's organization, so an id from elsewhere
+ * matches nothing rather than erroring. Days are oldest first.
+ */
+export async function teamPeriod(
+  actor: Actor,
+  input: { period: Period; anchor: string; memberId?: string | null; regionId?: string | null },
+  today: string = todayIso(),
+): Promise<{
+  range: { from: string; to: string; label: string };
+  people: TeamPerson[];
+  everyone: OverviewMember[];
+  regions: { id: string; name: string }[];
+  lastUpdated: Date | null;
+}> {
+  const where = scope(actor);
+  const range = periodRange(input.period, input.anchor, today);
+
+  const [members, regions, latest] = await Promise.all([
+    prisma.user.findMany({
+      where: { ...where, role: Role.MEMBER, status: EmploymentStatus.ACTIVE },
+      select: MEMBER_FIELDS,
+      orderBy: [{ name: "asc" }],
+    }),
+    prisma.region.findMany({
+      where: where.organizationId ? { organizationId: where.organizationId } : {},
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }],
+    }),
+    prisma.attendanceEvent.findFirst({
+      where: {
+        ...where,
+        date: { gte: toDbDate(range.from), lte: toDbDate(range.to) },
+      },
+      select: { at: true },
+      orderBy: { at: "desc" },
+    }),
+  ]);
+
+  const chosen = members.filter(
+    (m) =>
+      (!input.memberId || m.id === input.memberId) &&
+      (!input.regionId || m.regionId === input.regionId),
+  );
+  const days = await resolveRange(chosen, range.from, range.to, today);
+
+  return {
+    range,
+    people: chosen.map((m) => ({ ...toMember(m), days: days.get(m.id) ?? [] })),
+    everyone: members.map(toMember),
+    regions,
+    lastUpdated: latest?.at ?? null,
+  };
+}
+
 /** One member's days over a period, newest first. 404 outside the caller's org. */
 export async function memberPeriod(
   actor: Actor,
