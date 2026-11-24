@@ -258,24 +258,45 @@ export default async function EmployeeDashboardPage({
         <>
           {/* 2 — Summary */}
           <Section step={2} title="Overall attendance summary">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {/*
+              Every card is in the same unit so they add up: with one person,
+              days; with several, person-days (each person's working days
+              summed). Mixing calendar days in the first card with person-days
+              in the rest read as "14 working days, 27 present".
+            */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {[
-                { label: "Total working days", value: workingDays, chip: "bg-brand-tint text-brand-dark" },
-                { label: "Present days", value: overall.counts.PRESENT, chip: DAY_KIND_STYLE.PRESENT.chip },
-                { label: "Absent days", value: overall.counts.ABSENT, chip: DAY_KIND_STYLE.ABSENT.chip },
-                { label: "WFH days", value: overall.counts.WFH, chip: DAY_KIND_STYLE.WFH.chip },
-                { label: "Leave days", value: overall.counts.LEAVE, chip: DAY_KIND_STYLE.LEAVE.chip },
+                {
+                  label: many ? "Working person-days" : "Total working days",
+                  value: overall.workingDays,
+                  // "14 × 7" only when it is exactly that; someone who joined
+                  // mid-period has fewer days, and the product would not match.
+                  note: !many
+                    ? null
+                    : workingDays * people.length === overall.workingDays
+                      ? `${workingDays} working days × ${people.length} people`
+                      : `${workingDays} working days, ${people.length} people`,
+                  chip: "bg-brand-tint text-brand-dark",
+                },
+                { label: "Present", value: overall.counts.PRESENT, note: null, chip: DAY_KIND_STYLE.PRESENT.chip },
+                { label: "Absent", value: overall.counts.ABSENT, note: null, chip: DAY_KIND_STYLE.ABSENT.chip },
+                { label: "WFH", value: overall.counts.WFH, note: null, chip: DAY_KIND_STYLE.WFH.chip },
+                { label: "Leave", value: overall.counts.LEAVE, note: null, chip: DAY_KIND_STYLE.LEAVE.chip },
+                { label: "Not marked", value: overall.counts.NOT_MARKED, note: null, chip: DAY_KIND_STYLE.NOT_MARKED.chip },
               ].map((card) => (
                 <div key={card.label} className={`flex flex-col gap-1 rounded-xl px-4 py-4 ${card.chip}`}>
                   <span className="text-[28px] leading-none font-semibold">{card.value}</span>
                   <span className="text-[13px] text-ink-2">{card.label}</span>
+                  {card.note ? <span className="text-[11px] text-muted">{card.note}</span> : null}
                 </div>
               ))}
             </div>
             <p className="text-xs text-muted">
-              {many ? `Present, absent, WFH and leave are person-days across ${people.length} people. ` : ""}
+              {many
+                ? `All figures are person-days: Present + Absent + WFH + Leave + Not marked = ${overall.workingDays}. `
+                : ""}
               {overall.counts.NOT_MARKED > 0
-                ? `${overall.counts.NOT_MARKED} working ${overall.counts.NOT_MARKED === 1 ? "day is" : "days are"} not marked yet and ${overall.counts.NOT_MARKED === 1 ? "is" : "are"} left out of the percentage.`
+                ? `Not-marked days are left out of the attendance percentage.`
                 : "Every working day so far is marked."}
               {overall.half > 0 ? ` ${overall.half} half ${overall.half === 1 ? "day counts" : "days count"} as 0.5.` : ""}
             </p>
