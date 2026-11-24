@@ -72,6 +72,32 @@ describe("resolveDay", () => {
     expect(day?.kind).toBe("WEEKEND");
   });
 
+  it("ignores a Leave or Absent mark on a weekend: it is already a day off", () => {
+    const saturday = "2026-11-14";
+    for (const status of [AttendanceStatus.LEAVE, AttendanceStatus.ABSENT]) {
+      const day = resolveDay(facts({ date: saturday, mark: { status, modifier: null } }));
+      expect(day).toEqual({ date: saturday, kind: "WEEKEND", detail: null });
+    }
+  });
+
+  it("ignores a Leave or Absent mark on a holiday", () => {
+    const day = resolveDay(
+      facts({ holiday: { name: "Diwali" }, mark: { status: AttendanceStatus.LEAVE, modifier: null } }),
+    );
+    expect(day).toEqual({ date: "2026-11-16", kind: "HOLIDAY", detail: "Diwali" });
+  });
+
+  it("still counts a weekend or holiday someone worked", () => {
+    const saturday = resolveDay(
+      facts({ date: "2026-11-14", mark: { status: AttendanceStatus.PRESENT, modifier: null } }),
+    );
+    expect(saturday?.kind).toBe("PRESENT");
+    const holiday = resolveDay(
+      facts({ holiday: { name: "Diwali" }, mark: { status: AttendanceStatus.WFH, modifier: null } }),
+    );
+    expect(holiday?.kind).toBe("WFH");
+  });
+
   it("skips the future and the days before joining", () => {
     expect(resolveDay(facts({ date: "2026-11-19" }))).toBeNull();
     expect(resolveDay(facts({ joinedOn: "2026-11-17" }))).toBeNull();

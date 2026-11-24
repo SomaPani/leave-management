@@ -10,7 +10,9 @@ import { MONTH_NAMES, daysInMonth, isWeekend, isoDate } from "@/lib/date";
  *
  *   1. a future date, or one before the person joined → not counted (null)
  *   2. an attendance mark → that mark (it is what actually happened, so it
- *      beats approved leave; a half day or short leave stays as the detail)
+ *      beats approved leave; a half day or short leave stays as the detail).
+ *      On a weekend or holiday only a Present / WFH mark counts; a Leave or
+ *      Absent mark on a day off is ignored.
  *   3. a holiday for the whole organization or the person's region → HOLIDAY
  *   4. Saturday or Sunday → WEEKEND
  *   5. approved day-based leave covering the date → LEAVE
@@ -47,7 +49,14 @@ export function resolveDay(facts: DayFacts): ResolvedDay | null {
   if (date > facts.today) return null;
   if (facts.joinedOn && date < facts.joinedOn) return null;
 
-  if (facts.mark) {
+  // A weekend or holiday is already a day off, so only a mark saying the
+  // person *worked* it (Present / WFH) changes it. A Leave or Absent mark on
+  // a Saturday — easy to make on the Attendance screen — is ignored rather
+  // than counted as a leave or absent day.
+  const dayOff = facts.holiday !== null || isWeekend(date);
+  const worked = facts.mark?.status === "PRESENT" || facts.mark?.status === "WFH";
+
+  if (facts.mark && (worked || !dayOff)) {
     const detail = facts.mark.modifier ? MODIFIER_DETAIL[facts.mark.modifier] : null;
     return { date, kind: facts.mark.status, detail };
   }
