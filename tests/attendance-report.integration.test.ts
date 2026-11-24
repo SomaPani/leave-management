@@ -190,4 +190,16 @@ describe("GET /api/attendance/report", () => {
     expect(body).toContain("Bala Delhi");
     expect(body).not.toContain("Anu Chennai");
   });
+
+  it("exports only the picked employee, day by day", async () => {
+    actorRef.current = admin;
+    const res = await get(`period=month&month=11&year=2026&member=${anuId}`);
+    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="attendance_November-2026_employee.csv"');
+    const body = await res.text();
+    expect(body).toContain("Anu Chennai");
+    expect(body).not.toContain("Bala Delhi");
+    expect(body).toContain("Date,Day,Status,Detail");
+    expect(body).toContain("2026-11-03,Tue,Present,Half day");
+    expect(body).toContain("2026-11-01,Sun,Weekend,");
+  });
 });

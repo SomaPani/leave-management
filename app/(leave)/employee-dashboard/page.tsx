@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { AttendanceRing, TrendChart } from "@/components/report/charts";
-import { PrintButton } from "@/components/report/print-button";
+import { AutoPrint, PrintButton } from "@/components/report/print-button";
 import { Card, EmptyPanel, primaryButtonClass, selectClass } from "@/components/ui";
 import { ATTENDANCE_TIMEZONE, todayIso } from "@/lib/attendance";
 import {
@@ -117,7 +117,9 @@ export default async function EmployeeDashboardPage({
 }) {
   const actor = await requirePageActor();
   const today = todayIso();
-  const filters = parseReportFilters(await searchParams, today);
+  const params = await searchParams;
+  const filters = parseReportFilters(params, today);
+  const autoPrint = params.print === "1";
 
   const view = await teamPeriod(
     actor,
@@ -162,8 +164,19 @@ export default async function EmployeeDashboardPage({
   const grid = viewed ? monthGrid(filters.year, filters.month, viewed.days) : [];
   const many = people.length > 1;
 
+  // Once someone is picked — a name clicked in the table, or the Employee
+  // filter — Export covers only that person, for the month on the calendar.
+  const picked = filters.viewId || filters.memberId ? viewed : null;
+  const pickedQuery = picked
+    ? reportQuery(filters, { period: "month", memberId: picked.id, regionId: null, viewId: picked.id })
+    : null;
+  const excelHref = pickedQuery ? `/api/attendance/report?${pickedQuery}` : exportHref;
+  const pdfHref = pickedQuery ? `/employee-dashboard?${pickedQuery}&print=1` : null;
+  const pickedLabel = picked ? `${picked.name} – ${MONTH_NAMES[filters.month]} ${filters.year}` : null;
+
   return (
     <>
+      {autoPrint ? <AutoPrint /> : null}
       <PageHeader
         title="Employee dashboard"
         subtitle="Track · Analyze · Export — attendance for a month, quarter or year."
@@ -501,15 +514,32 @@ export default async function EmployeeDashboardPage({
 
           {/* 7 — Export */}
           <Section step={7} title="Export reports" className="print:hidden">
-            <p className="text-sm text-ink-2">Download the employee-wise report for {view.range.label}, with the filters above.</p>
-            <div className="flex flex-wrap gap-3">
-              <a
-                href={exportHref}
-                className="rounded-lg bg-[#15803d] px-5 py-3 text-sm font-semibold text-white no-underline transition-colors hover:bg-[#166534]"
-              >
+            <p className="text-sm text-ink-2">
+              {pickedLabel ? (
+                <>
+                  Download <span className="font-semibold">{pickedLabel}</span> only: the summary and every day of
+                  the month.
+                </>
+              ) : (
+                <>Download the employee-wise report for {view.range.label}, with the filters above.</>
+              )}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <a href={excelHref} className="rounded-lg bg-[#15803d] px-5 py-3 text-sm font-semibold text-white no-underline transition-colors hover:bg-[#166534]">
                 Export to Excel
               </a>
-              <PrintButton className="cursor-pointer rounded-lg bg-[#b91c1c] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#991b1b]" />
+              {pdfHref ? (
+                <a href={pdfHref} target="_blank" rel="noopener" className="cursor-pointer rounded-lg bg-[#b91c1c] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#991b1b] no-underline">
+                  Export to PDF
+                </a>
+              ) : (
+                <PrintButton className="cursor-pointer rounded-lg bg-[#b91c1c] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#991b1b]" />
+              )}
+              {picked && many ? (
+                <a href={exportHref} className="text-[13px] text-brand hover:underline">
+                  or export all employees ({view.range.label})
+                </a>
+              ) : null}
             </div>
             <p className="rounded-lg border border-brand-tint bg-brand-tint/50 px-4 py-3 text-[13px] text-brand-dark">
               ✓ Reports are ready to download. Excel opens the .csv file directly; for PDF choose “Save as PDF” in the print dialog.

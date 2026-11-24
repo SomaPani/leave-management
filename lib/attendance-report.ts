@@ -1,4 +1,4 @@
-import { MONTH_NAMES, daysInMonth, firstWeekdayOfMonth, isoDate } from "@/lib/date";
+import { MONTH_NAMES, daysInMonth, firstWeekdayOfMonth, formatWeekdayShort, isoDate } from "@/lib/date";
 import {
   type CountedKind,
   type DayCounts,
@@ -305,5 +305,29 @@ export function attendanceCsvRows(
     ],
     ...people.map((p, i) => [i + 1, p.name, p.empId ?? "", p.region ?? "", ...figures(p.summary)]),
     ["", `All (${label})`, "", "", ...figures(overall)],
+  ];
+}
+
+const DAY_LABEL: Record<DayKind, string> = {
+  PRESENT: "Present",
+  WFH: "WFH",
+  ABSENT: "Absent",
+  LEAVE: "Leave",
+  NOT_MARKED: "Not marked",
+  HOLIDAY: "Holiday",
+  WEEKEND: "Weekend",
+};
+
+/**
+ * One employee's export: their summary row, a blank line, then one row per
+ * day of the period (oldest first) — what the Daily attendance calendar shows.
+ */
+export function employeeCsvRows(person: CsvPerson & { days: ResolvedDay[] }, label: string): (string | number)[][] {
+  const table = attendanceCsvRows([person], person.summary, label).slice(0, 2);
+  return [
+    ...table,
+    [],
+    ["Date", "Day", "Status", "Detail"],
+    ...person.days.map((d) => [d.date, formatWeekdayShort(d.date), DAY_LABEL[d.kind], d.detail ?? ""]),
   ];
 }
