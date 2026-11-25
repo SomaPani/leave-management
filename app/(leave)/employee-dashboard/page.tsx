@@ -1,21 +1,16 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { AttendanceRing, TrendChart } from "@/components/report/charts";
-import { PrintButton } from "@/components/report/print-button";
-import { Card, EmptyPanel, primaryButtonClass, selectClass } from "@/components/ui";
+import { PercentChip, Section, StatusShares } from "@/components/report/parts";
+import { EmptyPanel, primaryButtonClass, selectClass } from "@/components/ui";
 import { ATTENDANCE_TIMEZONE, todayIso } from "@/lib/attendance";
 import {
-  type Band,
   type ReportFilters,
   anchorOf,
   combineSummaries,
-  formatPercent,
   insight,
-  monthGrid,
   parseReportFilters,
-  percentBand,
   reportQuery,
   statusShares,
   summarizeDays,
@@ -23,14 +18,16 @@ import {
   trend,
 } from "@/lib/attendance-report";
 import { MONTH_NAMES } from "@/lib/date";
-import type { DayKind, Period } from "@/lib/day-status";
+import type { Period } from "@/lib/day-status";
 import { DAY_KIND_STYLE } from "@/lib/day-style";
 import { teamPeriod } from "@/lib/overview-service";
 import { requirePageActor } from "@/lib/page-guards";
 
 /**
  * Admin: the Employee dashboard — attendance for a month, quarter or year,
- * for everyone or one team or one person, with a CSV and a printable export.
+ * for everyone or one team. Each name opens that person's own page
+ * (./[id]/page.tsx) with their month-, quarter- and year-wise detail and
+ * exports.
  *
  * Every figure comes from one `teamPeriod` read and the pure functions in
  * lib/attendance-report.ts, so the cards, table, ring, trend and the CSV agree.
@@ -44,60 +41,6 @@ const PERIOD_LABEL: Record<Period, string> = {
   quarter: "Quarterly",
   year: "Yearly",
 };
-
-const BAND_CHIP: Record<Band, string> = {
-  good: "bg-[#dcfce7] text-[#15803d]",
-  warn: "bg-[#fef3c7] text-[#92400e]",
-  bad: "bg-[#fee2e2] text-[#b91c1c]",
-};
-
-const BAR_FILL: Record<"PRESENT" | "ABSENT" | "WFH" | "LEAVE", string> = {
-  PRESENT: "bg-[#16a34a]",
-  ABSENT: "bg-[#dc2626]",
-  WFH: "bg-[#2563eb]",
-  LEAVE: "bg-[#d97706]",
-};
-
-/** The letter a calendar cell shows; colour is never the only signal. */
-const CELL_CODE: Partial<Record<DayKind, string>> = {
-  PRESENT: "P",
-  WFH: "WFH",
-  ABSENT: "A",
-  LEAVE: "L",
-  HOLIDAY: "H",
-  NOT_MARKED: "–",
-};
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function Section({
-  step,
-  title,
-  action,
-  children,
-  className = "",
-}: {
-  step: number;
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <Card className={`flex min-w-0 flex-col gap-4 p-5 break-inside-avoid ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2.5 text-[17px] font-semibold">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-[13px] text-white">
-            {step}
-          </span>
-          {title}
-        </h2>
-        {action}
-      </div>
-      {children}
-    </Card>
-  );
-}
 
 function formatUpdated(at: Date): string {
   return new Intl.DateTimeFormat("en-IN", {
@@ -142,12 +85,6 @@ export default async function EmployeeDashboardPage({
     view.range.label,
   );
 
-  const viewed =
-    people.find((p) => p.id === filters.viewId) ??
-    people.find((p) => p.id === filters.memberId) ??
-    people[0] ??
-    null;
-
   const href = (overrides: Partial<ReportFilters>) =>
     `/employee-dashboard?${reportQuery(filters, overrides)}`;
   const exportHref = `/api/attendance/report?${reportQuery(filters, { viewId: null })}`;
@@ -156,10 +93,6 @@ export default async function EmployeeDashboardPage({
   const years = Array.from({ length: 5 }, (_, i) => thisYear - 3 + i);
   if (!years.includes(filters.year)) years.push(filters.year);
 
-  const prevMonth = filters.month === 0 ? { month: 11, year: filters.year - 1 } : { month: filters.month - 1, year: filters.year };
-  const nextMonth = filters.month === 11 ? { month: 0, year: filters.year + 1 } : { month: filters.month + 1, year: filters.year };
-  const viewedId = viewed?.id ?? null;
-  const grid = viewed ? monthGrid(filters.year, filters.month, viewed.days) : [];
   const many = people.length > 1;
 
   return (
@@ -330,19 +263,17 @@ export default async function EmployeeDashboardPage({
                   </thead>
                   <tbody>
                     {people.map((p, i) => {
-                      const band = percentBand(p.summary.percent);
-                      const selected = p.id === viewedId;
                       return (
-                        <tr key={p.id} className={`border-b border-line last:border-b-0 ${selected ? "bg-brand-tint/40" : ""}`}>
+                        <tr key={p.id} className="border-b border-line last:border-b-0">
                           <td className="px-2.5 py-2.5 text-muted">{i + 1}</td>
                           <td className="px-2.5 py-2.5">
                             <Link
-                              href={`${href({ viewId: p.id })}#daily`}
-                              aria-current={selected ? "true" : undefined}
+                              href={`/employee-dashboard/${p.id}?${reportQuery(filters, { memberId: null, regionId: null, viewId: null })}`}
                               className="font-semibold text-brand hover:underline"
                             >
                               {p.name}
                             </Link>
+                            {p.empId ? <span className="ml-1.5 font-mono text-[11px] text-muted">{p.empId}</span> : null}
                           </td>
                           <td className="px-2.5 py-2.5 text-ink-2">{p.region ?? "—"}</td>
                           <td className="px-2.5 py-2.5 text-right tabular-nums">{p.summary.workingDays}</td>
@@ -354,9 +285,7 @@ export default async function EmployeeDashboardPage({
                           <td className="px-2.5 py-2.5 text-right tabular-nums">{p.summary.counts.WFH}</td>
                           <td className="px-2.5 py-2.5 text-right tabular-nums">{p.summary.counts.LEAVE}</td>
                           <td className="px-2.5 py-2.5 text-right">
-                            <span className={`inline-block rounded-md px-2 py-[3px] font-mono text-[12px] tabular-nums ${band ? BAND_CHIP[band] : "text-muted"}`}>
-                              {formatPercent(p.summary.percent)}
-                            </span>
+                            <PercentChip percent={p.summary.percent} />
                           </td>
                         </tr>
                       );
@@ -365,7 +294,7 @@ export default async function EmployeeDashboardPage({
                 </table>
               </div>
               <p className="text-xs text-muted">
-                Click a name to see their days below. Green is 90% or more, amber 75–90%, red under 75%.
+                Click a name to open that employee&rsquo;s page: day-, month-, quarter- and year-wise attendance, with Excel and PDF export. Green is 90% or more, amber 75–90%, red under 75%.
               </p>
             </Section>
 
@@ -373,25 +302,7 @@ export default async function EmployeeDashboardPage({
             <Section step={4} title="Attendance percentage">
               <div className="grid items-center gap-6 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
                 <AttendanceRing percent={overall.percent} />
-                <ul className="m-0 flex min-w-[200px] list-none flex-col gap-3 p-0">
-                  {shares.map((s) => (
-                    <li key={s.kind} className="flex flex-col gap-1">
-                      <span className="flex items-center justify-between gap-3 text-[13px]">
-                        <span className="flex items-center gap-2">
-                          <span className={`h-2.5 w-2.5 rounded-full ${BAR_FILL[s.kind]}`} aria-hidden="true" />
-                          {DAY_KIND_STYLE[s.kind].label}
-                        </span>
-                        <span className="font-semibold tabular-nums">
-                          {formatPercent(s.percent)}
-                          <span className="ml-1.5 font-normal text-muted">({s.count})</span>
-                        </span>
-                      </span>
-                      <span className="h-1.5 overflow-hidden rounded-full bg-line" aria-hidden="true">
-                        <span className={`block h-full rounded-full ${BAR_FILL[s.kind]}`} style={{ width: `${s.percent}%` }} />
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <StatusShares shares={shares} />
               <div
                 className={`rounded-xl border px-4 py-3.5 text-[13px] ${
                   note.tone === "good"
@@ -410,68 +321,9 @@ export default async function EmployeeDashboardPage({
             </Section>
           </div>
 
-          <div className="grid gap-7 xl:grid-cols-2">
-            {/* 5 — Daily details */}
-            <Section
-              step={5}
-              title="Daily attendance details"
-              action={
-                <span className="flex items-center gap-1 print:hidden">
-                  <Link href={`${href({ ...prevMonth, viewId: viewedId })}#daily`} aria-label="Previous month" className="rounded-md px-2 py-1 text-brand hover:bg-subtle">
-                    ‹
-                  </Link>
-                  <Link href={`${href({ ...nextMonth, viewId: viewedId })}#daily`} aria-label="Next month" className="rounded-md px-2 py-1 text-brand hover:bg-subtle">
-                    ›
-                  </Link>
-                </span>
-              }
-            >
-              <div id="daily" className="flex flex-col gap-3">
-                <p className="text-sm font-semibold">
-                  {viewed?.name} – {MONTH_NAMES[filters.month]} {filters.year}
-                </p>
-                <div className="grid grid-cols-7 gap-1 text-center">
-                  {WEEKDAYS.map((w) => (
-                    <span key={w} className="py-1 font-mono text-[11px] text-muted">
-                      {w}
-                    </span>
-                  ))}
-                  {grid.map((cell) => {
-                    if (cell.day === null) return <span key={cell.key} />;
-                    const style = cell.kind && cell.kind !== "WEEKEND" ? DAY_KIND_STYLE[cell.kind] : null;
-                    const code = cell.kind ? CELL_CODE[cell.kind] : null;
-                    const tip = [cell.date, style?.label ?? (cell.kind === "WEEKEND" ? "Weekend" : "Upcoming"), cell.detail]
-                      .filter(Boolean)
-                      .join(" · ");
-                    return (
-                      <span
-                        key={cell.key}
-                        title={tip}
-                        className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg border border-line text-[12px] ${
-                          cell.kind === "WEEKEND" || cell.kind === null ? "bg-subtle text-muted" : "bg-surface"
-                        }`}
-                      >
-                        <span>{cell.day}</span>
-                        {code && style ? (
-                          <span className={`rounded px-1.5 font-mono text-[10px] font-semibold ${style.chip}`}>{code}</span>
-                        ) : null}
-                      </span>
-                    );
-                  })}
-                </div>
-                <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                  <span>P Present</span>
-                  <span>A Absent</span>
-                  <span>WFH Work from home</span>
-                  <span>L Leave</span>
-                  <span>H Holiday</span>
-                  <span>– Not marked</span>
-                </p>
-              </div>
-            </Section>
-
-            {/* 6 — Trend */}
-            <Section step={6} title="Monthly / quarterly / yearly report">
+          <div className="grid gap-7">
+            {/* 5 — Trend */}
+            <Section step={5} title="Monthly / quarterly / yearly report">
               <nav aria-label="Report period" className="flex border-b border-line print:hidden">
                 {(Object.keys(PERIOD_LABEL) as Period[]).map((p) => {
                   const active = p === filters.period;
@@ -492,29 +344,15 @@ export default async function EmployeeDashboardPage({
               <p className="text-[13px] text-ink-2">
                 Attendance % by {filters.period === "month" ? "week" : "month"} — {view.range.label}
               </p>
+              <div className="max-w-3xl">
               <TrendChart
                 points={points}
                 caption={`Attendance percentage by ${filters.period === "month" ? "week" : "month"}, ${view.range.label}`}
               />
+              </div>
             </Section>
           </div>
 
-          {/* 7 — Export */}
-          <Section step={7} title="Export reports" className="print:hidden">
-            <p className="text-sm text-ink-2">Download the employee-wise report for {view.range.label}, with the filters above.</p>
-            <div className="flex flex-wrap gap-3">
-              <a
-                href={exportHref}
-                className="rounded-lg bg-[#15803d] px-5 py-3 text-sm font-semibold text-white no-underline transition-colors hover:bg-[#166534]"
-              >
-                Export to Excel
-              </a>
-              <PrintButton className="cursor-pointer rounded-lg bg-[#b91c1c] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#991b1b]" />
-            </div>
-            <p className="rounded-lg border border-brand-tint bg-brand-tint/50 px-4 py-3 text-[13px] text-brand-dark">
-              ✓ Reports are ready to download. Excel opens the .csv file directly; for PDF choose “Save as PDF” in the print dialog.
-            </p>
-          </Section>
         </>
       )}
     </>

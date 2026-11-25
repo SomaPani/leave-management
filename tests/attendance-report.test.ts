@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   attendanceCsvRows,
   combineSummaries,
+  employeeCsvRows,
   formatPercent,
   insight,
+  monthlyBreakdown,
   monthGrid,
   parseReportFilters,
   percentBand,
@@ -237,5 +239,52 @@ describe("attendanceCsvRows", () => {
     ]);
     expect(rows[1]).toEqual([1, "Anu", "E1", "Chennai", 2, 1, 1, 0, 0, 0, 0, "50%"]);
     expect(rows.at(-1)).toEqual(["", "All (November 2026)", "", "", 2, 1, 1, 0, 0, 0, 0, "50%"]);
+  });
+});
+
+describe("employeeCsvRows", () => {
+  it("writes one person's summary, then every day", () => {
+    const days = [day("2026-11-01", "WEEKEND"), day("2026-11-02", "PRESENT", "Half day"), day("2026-11-03", "LEAVE", "EL")];
+    const rows = employeeCsvRows(
+      { name: "Anu", empId: "E1", region: "Chennai", summary: summarizeDays(days), days },
+      { from: "2026-11-01", to: TODAY, label: "November 2026" },
+    );
+    expect(rows[1]?.slice(0, 4)).toEqual([1, "Anu", "E1", "Chennai"]);
+    expect(rows[2]).toEqual([]);
+    expect(rows[3]).toEqual(["Date", "Day", "Status", "Detail"]);
+    expect(rows.slice(4)).toEqual([
+      ["2026-11-01", "Sun", "Weekend", ""],
+      ["2026-11-02", "Mon", "Present", "Half day"],
+      ["2026-11-03", "Tue", "Leave", "EL"],
+    ]);
+    expect(rows.some((r) => String(r[1]).startsWith("All ("))).toBe(false);
+  });
+});
+
+describe("monthlyBreakdown", () => {
+  it("has a row per month up to the end of the range, across a year end", () => {
+    const rows = monthlyBreakdown({ from: "2025-11-01", to: "2026-01-20" }, [
+      day("2025-11-03", "PRESENT"),
+      day("2025-12-01", "ABSENT"),
+      day("2026-01-05", "PRESENT"),
+      day("2026-01-06", "ABSENT"),
+    ]);
+    expect(rows.map((r) => [r.label, r.summary.percent])).toEqual([
+      ["November 2025", 100],
+      ["December 2025", 0],
+      ["January 2026", 50],
+    ]);
+    expect(rows[2]).toMatchObject({ year: 2026, month: 0 });
+  });
+
+  it("adds a month-wise table to a quarter's employee export", () => {
+    const days = [day("2026-10-05", "PRESENT"), day("2026-11-02", "ABSENT")];
+    const rows = employeeCsvRows(
+      { name: "Anu", empId: "E1", region: null, summary: summarizeDays(days), days },
+      { from: "2026-10-01", to: TODAY, label: "Q4 2026" },
+    );
+    expect(rows).toContainEqual(["October 2026", 1, 1, 0, 0, 0, 0, 0, "100%"]);
+    expect(rows).toContainEqual(["November 2026", 1, 0, 1, 0, 0, 0, 0, "0%"]);
+    expect(rows.find((r) => r[0] === "December 2026")).toBeUndefined();
   });
 });
