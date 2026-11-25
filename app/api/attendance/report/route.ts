@@ -49,7 +49,7 @@ export async function GET(request: Request): Promise<Response> {
     const overall = combineSummaries(people.map((p) => p.summary));
     const single = filters.memberId && people.length === 1 ? people[0] : null;
     const rows = single
-      ? employeeCsvRows(single, view.range.label)
+      ? employeeCsvRows(single, view.range)
       : attendanceCsvRows(people, overall, view.range.label);
 
     const safe = (text: string) => text.trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9_-]/g, "");

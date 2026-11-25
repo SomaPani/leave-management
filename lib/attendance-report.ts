@@ -318,14 +318,55 @@ const DAY_LABEL: Record<DayKind, string> = {
   WEEKEND: "Weekend",
 };
 
+export type MonthRow = { year: number; month: number; label: string; summary: Summary };
+
+/** One row per month of the range (through `range.to`), oldest first. */
+export function monthlyBreakdown(range: { from: string; to: string }, days: ResolvedDay[]): MonthRow[] {
+  const rows: MonthRow[] = [];
+  let year = Number(range.from.slice(0, 4));
+  let month = Number(range.from.slice(5, 7)) - 1;
+  const last = range.to.slice(0, 7);
+  while (isoDate(year, month, 1).slice(0, 7) <= last) {
+    const key = isoDate(year, month, 1).slice(0, 7);
+    rows.push({
+      year,
+      month,
+      label: `${MONTH_NAMES[month]} ${year}`,
+      summary: summarizeDays(days.filter((d) => d.date.startsWith(key))),
+    });
+    month += 1;
+    if (month === 12) {
+      month = 0;
+      year += 1;
+    }
+  }
+  return rows;
+}
+
 /**
- * One employee's export: their summary row, a blank line, then one row per
- * day of the period (oldest first) — what the Daily attendance calendar shows.
+ * One employee's export: their summary row; for a quarter or year a
+ * month-by-month table; then one row per day of the period, oldest first.
  */
-export function employeeCsvRows(person: CsvPerson & { days: ResolvedDay[] }, label: string): (string | number)[][] {
-  const table = attendanceCsvRows([person], person.summary, label).slice(0, 2);
+export function employeeCsvRows(
+  person: CsvPerson & { days: ResolvedDay[] },
+  range: { from: string; to: string; label: string },
+): (string | number)[][] {
+  const table = attendanceCsvRows([person], person.summary, range.label).slice(0, 2);
+  // Months before the person joined have no days; they are left out.
+  const months = monthlyBreakdown(range, person.days).filter((m) =>
+    person.days.some((d) => d.date.startsWith(isoDate(m.year, m.month, 1).slice(0, 7))),
+  );
+  const monthRows =
+    months.length > 1
+      ? [
+          [],
+          ["Month", "Working days", "Present", "Absent", "WFH", "Leave", "Not marked", "Half days", "Attendance %"],
+          ...months.map((m) => [m.label, ...figures(m.summary)]),
+        ]
+      : [];
   return [
     ...table,
+    ...monthRows,
     [],
     ["Date", "Day", "Status", "Detail"],
     ...person.days.map((d) => [d.date, formatWeekdayShort(d.date), DAY_LABEL[d.kind], d.detail ?? ""]),
