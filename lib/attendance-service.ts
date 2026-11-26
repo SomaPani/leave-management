@@ -10,10 +10,12 @@ import {
   fromDbDate,
   isWorkingStatus,
   toDbDate,
+  todayIso,
   toggle,
   type AttendanceCode,
   type AttendanceState,
 } from "@/lib/attendance";
+import { isFirstMarkToday, notifyMarked } from "@/lib/attendance-notify";
 import { prisma } from "@/lib/prisma";
 import {
   type Actor,
@@ -263,11 +265,23 @@ export async function setAttendance(
 
   const date = toDbDate(input.date);
 
-  return prisma.$transaction(async (tx) => {
+  const { previous, markedBefore, row } = await prisma.$transaction(async (tx) => {
     const previous = await tx.attendance.findUnique({
       where: { userId_date: { userId: input.userId, date } },
       select: { status: true, modifier: true },
     });
+
+    // Marked worked earlier today, then cleared? Then this is not the first mark.
+    const markedBefore =
+      previous === null
+        ? (await tx.attendanceEvent.count({
+            where: {
+              userId: input.userId,
+              date,
+              toStatus: { in: [AttendanceStatus.PRESENT, AttendanceStatus.WFH] },
+            },
+          })) > 0
+        : true;
 
     const row = await tx.attendance.upsert({
       where: { userId_date: { userId: input.userId, date } },
@@ -300,8 +314,15 @@ export async function setAttendance(
       },
     });
 
-    return { status: row.status, modifier: row.modifier };
+    return { previous, markedBefore, row };
   });
+
+  // After the commit, so Slack never hears about a mark that rolled back.
+  if (isFirstMarkToday({ previous, markedBefore, status: row.status, date: input.date, today: todayIso() })) {
+    notifyMarked(organizationId, [input.userId]);
+  }
+
+  return { status: row.status, modifier: row.modifier };
 }
 
 /**
@@ -405,7 +426,7 @@ export async function markEveryonePresent(
   const organizationId = actor.organizationId;
   const day = toDbDate(date);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const members = await tx.user.findMany({
       where: {
         organizationId,
@@ -448,6 +469,9 @@ export async function markEveryonePresent(
       });
     }
 
-    return { filled: gaps.length, skipped: members.length - gaps.length };
+    return { filled: gaps.length, skipped: members.length - gaps.length, filledIds: gaps.map((m) => m.id) };
   });
+
+  if (date === todayIso()) notifyMarked(organizationId, result.filledIds);
+  return { filled: result.filled, skipped: result.skipped };
 }
